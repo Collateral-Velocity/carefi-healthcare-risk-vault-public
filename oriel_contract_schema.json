@@ -1,0 +1,15 @@
+{
+  "schema_version": "carefi.oriel.event-risk.v1",
+  "required_fields": [
+    "contract_id",
+    "title",
+    "risk_family",
+    "geography",
+    "public_print",
+    "model_probability",
+    "requested_notional",
+    "tenor_months",
+    "basis_grade"
+  ],
+  "notes": "Oriel supplies standardized event and reference probability inputs. CareFi applies capacity, concentration and capital-allocation rules."
+}
