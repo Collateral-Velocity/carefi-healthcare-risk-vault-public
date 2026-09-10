@@ -133,3 +133,49 @@ def portfolio_impact(portfolio: pd.DataFrame, vault: dict, payload: dict, quote:
 
 def oriel_payload_json() -> str:
     return json.dumps(copy.deepcopy(ORIEL_TEXAS_RESPIRATORY),indent=2)
+
+
+VAULT_TERMS = {
+    "vehicle": "CARE-HRV-01 · Healthcare Event Risk Vault 2027",
+    "legal_wrapper": "Single-purpose commodity pool / SPV or equivalent regulated wrapper; final form TBD with counsel and CPO/administrator.",
+    "investment_period": "Calendar 2027",
+    "base_term": "Through final settlement of approved 2027-originated positions plus orderly wind-down.",
+    "liquidity": "No ordinary redemption of capital supporting unresolved event positions; distributions from unencumbered cash at designated windows.",
+    "nav_frequency": "Monthly, plus material event-driven updates.",
+    "valuation_hierarchy": [
+        "Executable representative two-sided venue market",
+        "Oriel documented fair-value estimate",
+        "Independent administrator / risk-committee fair value",
+    ],
+    "eligible_sources": ["CDC", "BLS", "CMS", "BEA", "Other pre-approved independent public data sources"],
+    "minimum_basis_grade": "B+",
+    "leverage": "None assumed in base prototype",
+    "loss_waterfall": ["HRV-E", "HRV-M", "HRV-S"],
+    "distribution_waterfall": [
+        "Operating expenses and reserves",
+        "HRV-S entitlement",
+        "HRV-M entitlement",
+        "Residual to HRV-E",
+    ],
+    "management_fee": "TBD",
+    "performance_fee": "TBD",
+    "governance": "Documented risk-committee approval process for live deployment; exceptions recorded and disclosed.",
+    "token_role": "Programmable record of economic interest and vault accounting state; not a substitute for the regulated legal wrapper.",
+}
+
+ELIGIBILITY_RULES = [
+    "Healthcare utilization, medical-cost, reimbursement, healthcare-inflation, pharmacy/specialty-drug, or closely related healthcare-economic exposure.",
+    "Objective, independently published public print or rule-based observable.",
+    "Unambiguous observation window, publication source, revision policy and fallback.",
+    "Executable on an approved venue or through an approved regulated structure.",
+    "Independently valuable by Oriel or another approved administrator/reference process.",
+    "Passes CareFi underwriting for basis risk, probability, economics, duration and concentration.",
+]
+
+INELIGIBLE_RULES = [
+    "Discretionary claims determinations as the settlement trigger.",
+    "Non-public client data as the sole settlement source.",
+    "Unresolved legal enforceability or ambiguous settlement terms.",
+    "No defined source-disruption fallback.",
+    "Settlement materially controlled by the protection buyer or seller.",
+]
