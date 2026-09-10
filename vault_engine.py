@@ -1,4 +1,6 @@
 from __future__ import annotations
+import copy
+import json
 import pandas as pd
 
 CARE_HRV_01 = {
@@ -10,6 +12,23 @@ CARE_HRV_01 = {
     "geography_limit": 0.25,
 }
 
+ORIEL_TEXAS_RESPIRATORY = {
+    "contract_id": "ORIEL-HC-TX-FLU-2027-01",
+    "source": "Oriel Healthcare Event Risk Workbench",
+    "title": "Texas influenza ED-utilization seasonal touch",
+    "risk_family": "Respiratory Utilization",
+    "geography": "Texas",
+    "public_print": "CDC NSSP / FluView",
+    "trigger": "Influenza ED-visit percentage meets or exceeds the selected threshold during the defined 2027–28 respiratory-season window.",
+    "window_start": "2027-10-09",
+    "window_end": "2028-05-20",
+    "model_probability": 0.36,
+    "requested_notional": 1_000_000.0,
+    "tenor_months": 8,
+    "basis_grade": "B+",
+    "oriel_reference_version": "HERW 0.3.0",
+}
+
 SAMPLE_PORTFOLIO = pd.DataFrame([
     {"position":"Texas respiratory utilization","risk_family":"Respiratory Utilization","geography":"Texas","source":"CDC NSSP / FluView","notional":1_000_000.0,"price":0.43,"model_probability":0.36,"capital_at_risk":570_000.0},
     {"position":"National influenza ED utilization","risk_family":"Respiratory Utilization","geography":"National","source":"CDC NSSP / FluView","notional":900_000.0,"price":0.39,"model_probability":0.33,"capital_at_risk":549_000.0},
@@ -19,6 +38,11 @@ SAMPLE_PORTFOLIO = pd.DataFrame([
     {"position":"Specialty-drug utilization shock","risk_family":"Pharmacy / Specialty","geography":"National","source":"Public print TBD","notional":700_000.0,"price":0.35,"model_probability":0.28,"capital_at_risk":455_000.0},
 ])
 
+REQUIRED_ORIEL_FIELDS = [
+    "contract_id","title","risk_family","geography","public_print",
+    "model_probability","requested_notional","tenor_months","basis_grade"
+]
+
 def portfolio_metrics(portfolio: pd.DataFrame, target_capital: float) -> dict[str,float]:
     deployed=float(portfolio["capital_at_risk"].sum())
     available=max(target_capital-deployed,0.0)
@@ -26,7 +50,7 @@ def portfolio_metrics(portfolio: pd.DataFrame, target_capital: float) -> dict[st
     weighted_probability=float((weights*portfolio["model_probability"]).sum()) if deployed else 0.0
     expected_pnl=float(((portfolio["price"]-portfolio["model_probability"])*portfolio["notional"]).sum())
     indicative_yield=expected_pnl/deployed if deployed else 0.0
-    return {"deployed":deployed,"available":available,"weighted_probability":weighted_probability,"indicative_yield":indicative_yield}
+    return {"deployed":deployed,"available":available,"weighted_probability":weighted_probability,"indicative_yield":indicative_yield,"expected_pnl":expected_pnl}
 
 def _basis_charge(grade:str)->float:
     return {"A":0.005,"A-":0.008,"B+":0.015,"B":0.020,"B-":0.027,"C+":0.035}.get(grade,0.020)
@@ -68,3 +92,44 @@ def capacity_quote(portfolio:pd.DataFrame,vault:dict,requested_notional:float,ma
         "market_probability":market_probability,"uncertainty_charge":uncertainty,
         "duration_charge":duration,"basis_charge":basis,"concentration_charge":concentration,
     }
+
+def validate_oriel_payload(payload: dict) -> tuple[bool,list[str]]:
+    missing=[k for k in REQUIRED_ORIEL_FIELDS if k not in payload]
+    if missing:
+        return False, missing
+    p=float(payload["model_probability"])
+    n=float(payload["requested_notional"])
+    t=int(payload["tenor_months"])
+    if not 0 < p < 1 or n <= 0 or t <= 0:
+        return False, ["invalid_numeric_values"]
+    return True, []
+
+def parse_oriel_json(raw: str) -> dict:
+    payload=json.loads(raw)
+    ok, errors=validate_oriel_payload(payload)
+    if not ok:
+        raise ValueError("Invalid Oriel payload: " + ", ".join(errors))
+    return payload
+
+def portfolio_impact(portfolio: pd.DataFrame, vault: dict, payload: dict, quote: dict) -> dict:
+    before=portfolio_metrics(portfolio,float(vault["target_capital"]))
+    added=float(quote["capital_consumed"])
+    eligible=float(quote["eligible_capacity"])
+    if eligible <= 0:
+        return {"before":before,"after":before,"delta_expected_pnl":0.0}
+    row={
+        "position":str(payload["title"]),
+        "risk_family":str(payload["risk_family"]),
+        "geography":str(payload["geography"]),
+        "source":str(payload["public_print"]),
+        "notional":eligible,
+        "price":float(quote["minimum_price"]),
+        "model_probability":float(payload["model_probability"]),
+        "capital_at_risk":added,
+    }
+    after_df=pd.concat([portfolio,pd.DataFrame([row])],ignore_index=True)
+    after=portfolio_metrics(after_df,float(vault["target_capital"]))
+    return {"before":before,"after":after,"delta_expected_pnl":after["expected_pnl"]-before["expected_pnl"]}
+
+def oriel_payload_json() -> str:
+    return json.dumps(copy.deepcopy(ORIEL_TEXAS_RESPIRATORY),indent=2)
