@@ -13,6 +13,9 @@ from vault_engine import (
     parse_oriel_json,
     portfolio_impact,
     oriel_payload_json,
+    VAULT_TERMS,
+    ELIGIBILITY_RULES,
+    INELIGIBLE_RULES,
 )
 
 def money(x: float) -> str:
@@ -37,7 +40,7 @@ html,body,[class*="css"]{font-family:'DM Sans',sans-serif;color:#172033}
 </style>
 """,unsafe_allow_html=True)
 
-st.markdown("<div class='topbar'><div class='brand'>CARE<span>FI</span></div><div class='tag'>EVENT CAPACITY PROTOCOL · V0.2</div></div>",unsafe_allow_html=True)
+st.markdown("<div class='topbar'><div class='brand'>CARE<span>FI</span></div><div class='tag'>EVENT CAPACITY PROTOCOL · V0.3</div></div>",unsafe_allow_html=True)
 st.markdown("<div class='hero'><h1>"+CARE_HRV_01["name"]+"</h1><p>"+CARE_HRV_01["mandate"]+"</p></div>",unsafe_allow_html=True)
 
 metrics=portfolio_metrics(SAMPLE_PORTFOLIO,CARE_HRV_01["target_capital"])
@@ -48,7 +51,7 @@ m3.metric("Available capacity",money(metrics["available"]))
 m4.metric("Weighted event probability",f"{metrics['weighted_probability']:.1%}")
 m5.metric("Indicative portfolio yield",f"{metrics['indicative_yield']:.1%}")
 
-tabs=st.tabs(["Vault Overview","Request Capacity","Portfolio Impact","Portfolio","Tokenized Interests","Oriel Reference Layer"])
+tabs=st.tabs(["Vault Overview","Mandate & Terms","Request Capacity","Portfolio Impact","Portfolio","Tokenized Interests","Oriel Reference Layer"])
 
 with tabs[0]:
     st.markdown("<div class='section'>Mandate & controls</div>",unsafe_allow_html=True)
@@ -76,6 +79,48 @@ if "payload" not in st.session_state:
     st.session_state.payload=dict(ORIEL_TEXAS_RESPIRATORY)
 
 with tabs[1]:
+    st.markdown("<div class='section'>Vault mandate and economic wrapper</div>",unsafe_allow_html=True)
+    st.markdown("<div class='callout'><b>Prototype term sheet.</b> CARE-HRV-01 is modeled as a regulated CPO/SPV-style capital vehicle with tokenized economic interests layered on top. The token does not replace the legal wrapper, venue, clearing or custody infrastructure.</div>",unsafe_allow_html=True)
+    left_terms,right_terms=st.columns(2,gap="large")
+    with left_terms:
+        st.markdown("#### Core terms")
+        core=pd.DataFrame([
+            ["Legal wrapper",VAULT_TERMS["legal_wrapper"]],
+            ["Investment period",VAULT_TERMS["investment_period"]],
+            ["Base term",VAULT_TERMS["base_term"]],
+            ["Liquidity",VAULT_TERMS["liquidity"]],
+            ["NAV frequency",VAULT_TERMS["nav_frequency"]],
+            ["Minimum basis grade",VAULT_TERMS["minimum_basis_grade"]],
+            ["Leverage",VAULT_TERMS["leverage"]],
+            ["Management fee",VAULT_TERMS["management_fee"]],
+            ["Performance fee",VAULT_TERMS["performance_fee"]],
+        ],columns=["Term","Prototype policy"])
+        st.dataframe(core,use_container_width=True,hide_index=True)
+        st.markdown("#### Eligibility")
+        for rule in ELIGIBILITY_RULES:
+            st.markdown("✓ "+rule)
+        st.markdown("#### Normally ineligible without exception")
+        for rule in INELIGIBLE_RULES:
+            st.markdown("— "+rule)
+    with right_terms:
+        st.markdown("#### Valuation hierarchy")
+        for i,item in enumerate(VAULT_TERMS["valuation_hierarchy"],1):
+            st.markdown(f"**{i}.** {item}")
+        st.markdown("#### Loss waterfall")
+        st.markdown(" → ".join(VAULT_TERMS["loss_waterfall"])+"  
+*First-loss to last-loss*")
+        st.markdown("#### Distribution waterfall")
+        for i,item in enumerate(VAULT_TERMS["distribution_waterfall"],1):
+            st.markdown(f"**{i}.** {item}")
+        st.markdown("#### Governance")
+        st.write(VAULT_TERMS["governance"])
+        st.markdown("#### Token role")
+        st.write(VAULT_TERMS["token_role"])
+        st.markdown("#### Breach / disruption policy")
+        st.write("Passive breaches caused by NAV movement do not automatically force liquidation. New allocations to the affected bucket stop; CareFi may reduce, hedge, run off or seek a documented temporary exception. Every contract must define a public-print fallback before execution.")
+    st.caption("Prototype terms only. Final legal, tax, securities, commodities, custody and offering terms require counsel and service-provider review.")
+
+with tabs[2]:
     st.markdown("<div class='section'>Oriel → CareFi capacity request</div>",unsafe_allow_html=True)
     st.markdown("<div class='callout'><b>Preloaded example:</b> Texas respiratory utilization from the Oriel Healthcare Event Risk Workbench. Edit any field below or import a standardized Oriel JSON payload.</div>",unsafe_allow_html=True)
     with st.expander("Import from Oriel JSON"):
@@ -134,7 +179,7 @@ with tabs[1]:
         bridge["Price contribution"]=bridge["Price contribution"].map(lambda x:f"{x:.1%}")
         st.dataframe(bridge,use_container_width=True,hide_index=True)
 
-with tabs[2]:
+with tabs[3]:
     quote=st.session_state.get("last_quote",capacity_quote(SAMPLE_PORTFOLIO,CARE_HRV_01,ORIEL_TEXAS_RESPIRATORY["requested_notional"],ORIEL_TEXAS_RESPIRATORY["model_probability"],ORIEL_TEXAS_RESPIRATORY["risk_family"],ORIEL_TEXAS_RESPIRATORY["geography"],ORIEL_TEXAS_RESPIRATORY["tenor_months"],ORIEL_TEXAS_RESPIRATORY["basis_grade"]))
     payload=st.session_state.get("last_payload",ORIEL_TEXAS_RESPIRATORY)
     impact=st.session_state.get("last_impact",portfolio_impact(SAMPLE_PORTFOLIO,CARE_HRV_01,payload,quote))
@@ -147,7 +192,7 @@ with tabs[2]:
     a4.metric("Incremental expected P&L",money(impact["delta_expected_pnl"]))
     st.markdown("<div class='dark'><b>Capital allocation logic:</b> CARE-HRV-01 does not simply accept every positive-edge event. Capacity is capped by single-event, risk-family, geography and total available-capital constraints. The same Oriel contract can therefore clear at different capacity levels as the vault portfolio changes.</div>",unsafe_allow_html=True)
 
-with tabs[3]:
+with tabs[4]:
     st.markdown("<div class='section'>Current modeled portfolio</div>",unsafe_allow_html=True)
     display=SAMPLE_PORTFOLIO.copy()
     display["notional"]=display["notional"].map(money)
@@ -156,7 +201,7 @@ with tabs[3]:
     display["price"]=display["price"].map(lambda x:f"{x:.1%}")
     st.dataframe(display,use_container_width=True,hide_index=True)
 
-with tabs[4]:
+with tabs[5]:
     st.markdown("<div class='section'>Illustrative digital interests</div>",unsafe_allow_html=True)
     st.markdown("""
 The blockchain layer records vault ownership, subscriptions, NAV, deployed collateral, loss allocation and distributions. The prototype does **not** assume unrestricted secondary trading.
@@ -170,7 +215,7 @@ The blockchain layer records vault ownership, subscriptions, NAV, deployed colla
 A regulated CPO/SPV or equivalent institutional wrapper would remain the legal capital vehicle. The token is the programmable accounting and ownership layer—not a substitute for regulated execution, clearing or fund governance.
 """)
 
-with tabs[5]:
+with tabs[6]:
     st.markdown("<div class='section'>Oriel reference architecture</div>",unsafe_allow_html=True)
     st.markdown("""
 **Oriel Workbench → standardized contract payload → CARE-HRV-01 capacity engine → venue execution → vault portfolio.**
