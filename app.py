@@ -1,7 +1,9 @@
 from __future__ import annotations
 import json
+import time
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 import streamlit as st
 
 from vault_engine import (
@@ -45,6 +47,11 @@ from vault_engine import (
     burn_tokens,
     whitelist_wallet,
     token_nav_distribution_sync,
+    PROTOCOL_CAPITAL_POOLS,
+    PROTOCOL_LIFECYCLE,
+    TRANSACTION_STEPS,
+    route_capacity_request,
+    protocol_transaction_snapshot,
 )
 
 def money(x: float) -> str:
@@ -69,8 +76,11 @@ html,body,[class*="css"]{font-family:'DM Sans',sans-serif;color:#172033}
 </style>
 """,unsafe_allow_html=True)
 
-st.markdown("<div class='topbar'><div class='brand'>CARE<span>FI</span></div><div class='tag'>HEALTHCARE EVENT RISK VAULT · V0.9</div></div>",unsafe_allow_html=True)
-st.markdown("<div class='hero'><h1>"+CARE_HRV_01["name"]+"</h1><p>"+CARE_HRV_01["mandate"]+"</p></div>",unsafe_allow_html=True)
+st.markdown("<div class='topbar'><div class='brand'>CARE<span>FI</span></div><div class='tag'>EVENT CAPACITY PROTOCOL · V1.0</div></div>",unsafe_allow_html=True)
+st.markdown("<div class='hero'><h1>CareFi Event Capacity Protocol</h1><p>Standardize event risk, route it to institutional capital, attach healthcare-inflation hedges, and carry the position through settlement and investor distribution. <b>First modeled vault: CARE-HRV-01.</b></p></div>",unsafe_allow_html=True)
+
+if "payload" not in st.session_state:
+    st.session_state.payload=dict(ORIEL_TEXAS_RESPIRATORY)
 
 metrics=portfolio_metrics(SAMPLE_PORTFOLIO,CARE_HRV_01["target_capital"])
 m1,m2,m3,m4,m5=st.columns(5)
@@ -80,9 +90,207 @@ m3.metric("Available capacity",money(metrics["available"]))
 m4.metric("Weighted event probability",f"{metrics['weighted_probability']:.1%}")
 m5.metric("Indicative portfolio yield",f"{metrics['indicative_yield']:.1%}")
 
-tabs=st.tabs(["Vault Overview","Mandate & Terms","Request Capacity","Portfolio Impact","Portfolio","NAV & Marks","Risk Analytics","Cash & Collateral","Waterfall Simulator","Tokenized Interests","Oriel Reference Layer"])
+tabs=st.tabs(["Protocol Overview","Transaction Flow","Vault Overview","Mandate & Terms","Request Capacity","Portfolio Impact","Portfolio","NAV & Marks","Risk Analytics","Cash & Collateral","Waterfall Simulator","Tokenized Interests","Oriel Reference Layer"])
 
 with tabs[0]:
+    st.markdown("<div class='section'>CareFi Event Capacity Protocol</div>",unsafe_allow_html=True)
+    st.markdown("<div class='callout'><b>Protocol layer.</b> Oriel standardizes and values event risk; the CareFi protocol validates, routes and assembles institutional capacity across eligible capital pools; MEDUSDi can hedge the common healthcare-inflation factor; venues execute and settle; the token layer records investor economics and lifecycle state.</div>",unsafe_allow_html=True)
+
+    protocol_payload=st.session_state.get("last_payload",st.session_state.payload)
+    routed=route_capacity_request(protocol_payload)
+
+    p1,p2,p3,p4,p5=st.columns(5)
+    p1.metric("Risk request",money(routed["requested_notional"]))
+    p2.metric("Capacity assembled",money(routed["assembled_capacity"]))
+    p3.metric("Fill ratio",f"{routed['fill_ratio']:.0%}")
+    p4.metric("Blended minimum price",f"{routed['blended_price']:.1%}" if routed["assembled_capacity"] else "—")
+    p5.metric("MEDUSDi overlay",money(routed["blended_medusdi_hedge"]))
+
+    st.markdown("#### Capital registry")
+    registry_rows=[]
+    for pool in PROTOCOL_CAPITAL_POOLS:
+        registry_rows.append([
+            pool["pool_id"],pool["name"],pool["mandate"],money(pool["target_capital"]),
+            money(pool["available_capacity"]),", ".join(pool["eligible_families"]),
+            pool["minimum_basis_grade"],pool["medusdi_policy"],
+        ])
+    registry_df=pd.DataFrame(registry_rows,columns=[
+        "Pool","Capital pool","Mandate","Target capital","Available capacity",
+        "Eligible risk families","Min basis grade","MEDUSDi policy"
+    ])
+    st.dataframe(registry_df,use_container_width=True,hide_index=True)
+
+    st.markdown("#### Routed capacity quotes")
+    quote_rows=[]
+    allocation_lookup={a["pool_id"]:a for a in routed["allocations"]}
+    for q in routed["quotes"]:
+        alloc=allocation_lookup.get(q["pool_id"])
+        quote_rows.append([
+            q["pool_id"],q["decision"],q["reason"],money(q["eligible_capacity"]),
+            f"{q['minimum_price']:.1%}" if q["minimum_price"] is not None else "—",
+            money(alloc["allocated_notional"]) if alloc else money(0),
+            money(alloc["allocated_medusdi_hedge"]) if alloc else money(0),
+        ])
+    quotes_df=pd.DataFrame(quote_rows,columns=[
+        "Pool","Decision","Reason","Quoted capacity","Minimum price","Allocated","MEDUSDi hedge"
+    ])
+    st.dataframe(quotes_df,use_container_width=True,hide_index=True)
+
+    st.markdown("#### Capacity assembly")
+    if routed["allocations"]:
+        alloc_df=pd.DataFrame([
+            {
+                "Pool":a["pool_id"],
+                "Allocated notional":a["allocated_notional"],
+                "Minimum price":a["minimum_price"],
+                "MEDUSDi hedge":a["allocated_medusdi_hedge"],
+            } for a in routed["allocations"]
+        ])
+        fig_alloc=px.bar(
+            alloc_df,x="Pool",y="Allocated notional",
+            text=alloc_df["Allocated notional"].map(money),
+            labels={"Allocated notional":"Allocated capacity"}
+        )
+        fig_alloc.update_layout(height=320,margin=dict(l=0,r=0,t=20,b=0))
+        st.plotly_chart(fig_alloc,use_container_width=True,config={"displayModeBar":False})
+
+    st.markdown("#### Protocol flow")
+    node_labels=["Risk request","Oriel","CareFi Protocol"]+[p["pool_id"] for p in PROTOCOL_CAPITAL_POOLS]+["MEDUSDi","Venue","HRV-S / M / E","Investors"]
+    node_index={name:i for i,name in enumerate(node_labels)}
+    source=[node_index["Risk request"],node_index["Oriel"]]
+    target=[node_index["Oriel"],node_index["CareFi Protocol"]]
+    value=[routed["requested_notional"],routed["requested_notional"]]
+    for alloc in routed["allocations"]:
+        source.append(node_index["CareFi Protocol"])
+        target.append(node_index[alloc["pool_id"]])
+        value.append(alloc["allocated_notional"])
+        source.append(node_index[alloc["pool_id"]])
+        target.append(node_index["Venue"])
+        value.append(alloc["allocated_notional"])
+        if alloc["allocated_medusdi_hedge"]>0:
+            source.append(node_index[alloc["pool_id"]])
+            target.append(node_index["MEDUSDi"])
+            value.append(alloc["allocated_medusdi_hedge"])
+    source.extend([node_index["Venue"],node_index["HRV-S / M / E"]])
+    target.extend([node_index["HRV-S / M / E"],node_index["Investors"]])
+    value.extend([routed["assembled_capacity"],routed["assembled_capacity"]])
+    sankey=go.Figure(data=[go.Sankey(
+        node=dict(label=node_labels,pad=18,thickness=18),
+        link=dict(source=source,target=target,value=value),
+    )])
+    sankey.update_layout(height=420,margin=dict(l=0,r=0,t=20,b=10))
+    st.plotly_chart(sankey,use_container_width=True,config={"displayModeBar":False})
+
+    lifecycle=pd.DataFrame(PROTOCOL_LIFECYCLE,columns=["State","Responsible layer"])
+    st.markdown("#### Canonical lifecycle")
+    st.dataframe(lifecycle,use_container_width=True,hide_index=True)
+    st.caption("CARE-HRV-01 is the first modeled vault on this protocol. CARE-RESP-01 and CARE-INF-01 are illustrative prototype capacity pools used to demonstrate multi-pool routing.")
+
+with tabs[1]:
+    st.markdown("<div class='section'>Risk enters → capacity assembles → hedge attaches → capital stack updates</div>",unsafe_allow_html=True)
+    st.markdown("<div class='callout'><b>One risk, end to end.</b> Run the guided demo to watch a standardized Oriel healthcare event move through the protocol into institutional capacity, a MEDUSDi factor hedge, venue collateralization, the CARE-HRV capital stack and tokenized investor distributions.</div>",unsafe_allow_html=True)
+
+    flow_payload=st.session_state.get("last_payload",st.session_state.payload)
+    tx=protocol_transaction_snapshot(flow_payload)
+    if "protocol_flow_step" not in st.session_state:
+        st.session_state.protocol_flow_step=0
+
+    f1,f2,f3=st.columns([1,1,1])
+    play=f1.button("▶ Play transaction",use_container_width=True)
+    if f2.button("Next step →",use_container_width=True):
+        st.session_state.protocol_flow_step=min(st.session_state.protocol_flow_step+1,len(TRANSACTION_STEPS)-1)
+    if f3.button("↺ Reset",use_container_width=True):
+        st.session_state.protocol_flow_step=0
+
+    progress=st.progress((st.session_state.protocol_flow_step+1)/len(TRANSACTION_STEPS))
+    flow_placeholder=st.empty()
+
+    def render_protocol_step(step_index:int):
+        step=TRANSACTION_STEPS[step_index]
+        routed_tx=tx["routed"]
+        with flow_placeholder.container():
+            st.markdown("### "+str(step_index+1)+" · "+step)
+            if step_index==0:
+                s1,s2,s3,s4=st.columns(4)
+                s1.metric("Requested protection",money(flow_payload["requested_notional"]))
+                s2.metric("Oriel probability",f"{float(flow_payload['model_probability']):.1%}")
+                s3.metric("Geography",str(flow_payload["geography"]))
+                s4.metric("Tenor",str(flow_payload["tenor_months"])+" months")
+                st.markdown("<div class='dark'><b>"+str(flow_payload["title"])+"</b><br>"+str(flow_payload["trigger"])+"<br><br>Settlement source: "+str(flow_payload["public_print"])+"</div>",unsafe_allow_html=True)
+            elif step_index==1:
+                s1,s2,s3,s4=st.columns(4)
+                s1.metric("Contract ID",str(flow_payload["contract_id"]))
+                s2.metric("Basis grade",str(flow_payload["basis_grade"]))
+                s3.metric("Risk family",str(flow_payload["risk_family"]))
+                s4.metric("Validation","PASSED")
+                st.json(flow_payload,expanded=False)
+            elif step_index==2:
+                arows=[]
+                for a in routed_tx["allocations"]:
+                    arows.append([a["pool_id"],money(a["allocated_notional"]),f"{a['minimum_price']:.1%}",money(a["allocated_medusdi_hedge"])])
+                st.dataframe(pd.DataFrame(arows,columns=["Capital pool","Allocated","Min price","MEDUSDi hedge"]),use_container_width=True,hide_index=True)
+                s1,s2,s3=st.columns(3)
+                s1.metric("Assembled",money(routed_tx["assembled_capacity"]))
+                s2.metric("Blended minimum price",f"{routed_tx['blended_price']:.1%}")
+                s3.metric("Unfilled",money(routed_tx["unfilled"]))
+            elif step_index==3:
+                hedge=tx["beta"]
+                s1,s2,s3=st.columns(3)
+                s1.metric("Gross healthcare beta",money(hedge["gross_beta_exposure"]))
+                s2.metric("MEDUSDi hedge",money(routed_tx["blended_medusdi_hedge"]))
+                s3.metric("Net modeled beta",money(max(hedge["gross_beta_exposure"]-routed_tx["blended_medusdi_hedge"],0.0)))
+                st.markdown("<div class='dark'>The event-specific risk remains in the capacity pools while MEDUSDi offsets part of the common healthcare-inflation factor.</div>",unsafe_allow_html=True)
+            elif step_index==4:
+                s1,s2,s3,s4=st.columns(4)
+                s1.metric("Execution state","ALLOCATED")
+                s2.metric("Notional to venue",money(routed_tx["assembled_capacity"]))
+                s3.metric("Modeled collateral",money(tx["posted_collateral"]))
+                s4.metric("Observation state","READY")
+                st.progress(routed_tx["fill_ratio"])
+                st.caption("Venue execution and collateral are represented as lifecycle states in the prototype; no live venue order is submitted.")
+            elif step_index==5:
+                s1,s2,s3,s4=st.columns(4)
+                s1.metric("Vault NAV",money(tx["vault_nav"]))
+                s2.metric("Correlated expected loss",money(tx["expected_loss"]))
+                s3.metric("95% loss",money(tx["var95_loss"]))
+                s4.metric("Capital stack","HRV-E → HRV-M → HRV-S")
+                stack=pd.DataFrame([
+                    ["HRV-S","50%","Senior / last loss"],
+                    ["HRV-M","30%","Mezzanine"],
+                    ["HRV-E","20%","Equity / first loss"],
+                ],columns=["Class","Target capital","Role"])
+                st.dataframe(stack,use_container_width=True,hide_index=True)
+            else:
+                sync=token_nav_distribution_sync(
+                    CARE_HRV_01["target_capital"],tx["vault_nav"],750000.0,
+                    senior_pref=WATERFALL_DEFAULTS["senior_pref"],mezz_pref=WATERFALL_DEFAULTS["mezz_pref"]
+                )
+                out=sync[["class","nav_per_token","distribution","distribution_per_token","sync_state"]].copy()
+                out["nav_per_token"]=out["nav_per_token"].map(lambda x:"USD "+f"{x:,.4f}")
+                out["distribution"]=out["distribution"].map(money)
+                out["distribution_per_token"]=out["distribution_per_token"].map(lambda x:"USD "+f"{x:,.4f}")
+                out.columns=["Class","NAV / token","Distribution","Distribution / token","Ledger state"]
+                st.dataframe(out,use_container_width=True,hide_index=True)
+                st.success("Public print resolves → venue settles → vault NAV updates → waterfall allocates proceeds → token ledger synchronizes investor entitlements.")
+
+    if play:
+        for i in range(len(TRANSACTION_STEPS)):
+            st.session_state.protocol_flow_step=i
+            progress.progress((i+1)/len(TRANSACTION_STEPS))
+            flow_placeholder.empty()
+            render_protocol_step(i)
+            time.sleep(0.55)
+    else:
+        render_protocol_step(st.session_state.protocol_flow_step)
+
+    step_status=pd.DataFrame([
+        [str(i+1),name,"COMPLETE" if i<st.session_state.protocol_flow_step else ("ACTIVE" if i==st.session_state.protocol_flow_step else "PENDING")]
+        for i,name in enumerate(TRANSACTION_STEPS)
+    ],columns=["Step","Transaction state","Status"])
+    st.dataframe(step_status,use_container_width=True,hide_index=True)
+    st.caption("The guided flow is a deterministic demonstration of the protocol architecture; capital pools, pricing adjustments and lifecycle outputs remain prototype assumptions.")
+
+with tabs[2]:
     st.markdown("<div class='section'>Mandate & controls</div>",unsafe_allow_html=True)
     c1,c2=st.columns([1.15,1],gap="large")
     with c1:
@@ -107,7 +315,7 @@ with tabs[0]:
 if "payload" not in st.session_state:
     st.session_state.payload=dict(ORIEL_TEXAS_RESPIRATORY)
 
-with tabs[1]:
+with tabs[3]:
     st.markdown("<div class='section'>Vault mandate and economic wrapper</div>",unsafe_allow_html=True)
     st.markdown("<div class='callout'><b>Prototype term sheet.</b> CARE-HRV-01 is modeled as a regulated CPO/SPV-style capital vehicle with tokenized economic interests layered on top. The token does not replace the legal wrapper, venue, clearing or custody infrastructure.</div>",unsafe_allow_html=True)
     left_terms,right_terms=st.columns(2,gap="large")
@@ -148,7 +356,7 @@ with tabs[1]:
         st.write("Passive breaches caused by NAV movement do not automatically force liquidation. New allocations to the affected bucket stop; CareFi may reduce, hedge, run off or seek a documented temporary exception. Every contract must define a public-print fallback before execution.")
     st.caption("Prototype terms only. Final legal, tax, securities, commodities, custody and offering terms require counsel and service-provider review.")
 
-with tabs[2]:
+with tabs[4]:
     st.markdown("<div class='section'>Oriel → CareFi capacity request</div>",unsafe_allow_html=True)
     st.markdown("<div class='callout'><b>Preloaded example:</b> Texas respiratory utilization from the Oriel Healthcare Event Risk Workbench. Edit any field below or import a standardized Oriel JSON payload.</div>",unsafe_allow_html=True)
     with st.expander("Import from Oriel JSON"):
@@ -221,7 +429,7 @@ with tabs[2]:
         h3.metric("Net healthcare-beta exposure",money(medusdi_request["net_beta_exposure"]))
         st.caption("Illustrative factor hedge only. The prototype does not yet give hard collateral or concentration-limit credit for MEDUSDi; it shows how the common healthcare-inflation component could be offset alongside the event position.")
 
-with tabs[3]:
+with tabs[5]:
     quote=st.session_state.get("last_quote",capacity_quote(SAMPLE_PORTFOLIO,CARE_HRV_01,ORIEL_TEXAS_RESPIRATORY["requested_notional"],ORIEL_TEXAS_RESPIRATORY["model_probability"],ORIEL_TEXAS_RESPIRATORY["risk_family"],ORIEL_TEXAS_RESPIRATORY["geography"],ORIEL_TEXAS_RESPIRATORY["tenor_months"],ORIEL_TEXAS_RESPIRATORY["basis_grade"]))
     payload=st.session_state.get("last_payload",ORIEL_TEXAS_RESPIRATORY)
     impact=st.session_state.get("last_impact",portfolio_impact(SAMPLE_PORTFOLIO,CARE_HRV_01,payload,quote))
@@ -234,7 +442,7 @@ with tabs[3]:
     a4.metric("Incremental expected P&L",money(impact["delta_expected_pnl"]))
     st.markdown("<div class='dark'><b>Capital allocation logic:</b> CARE-HRV-01 does not simply accept every positive-edge event. Capacity is capped by single-event, risk-family, geography and total available-capital constraints. The same Oriel contract can therefore clear at different capacity levels as the vault portfolio changes.</div>",unsafe_allow_html=True)
 
-with tabs[4]:
+with tabs[6]:
     st.markdown("<div class='section'>MEDUSDi healthcare-beta dashboard</div>",unsafe_allow_html=True)
     portfolio_hedge_ratio=st.slider("Portfolio MEDUSDi hedge ratio",0,100,int(MEDUSDI_DEFAULTS["portfolio_hedge_ratio"]*100),5,key="portfolio_medusdi_ratio")/100
     beta_view=portfolio_healthcare_beta(SAMPLE_PORTFOLIO,portfolio_hedge_ratio)
@@ -258,7 +466,7 @@ with tabs[4]:
     display["price"]=display["price"].map(lambda x:f"{x:.1%}")
     st.dataframe(display,use_container_width=True,hide_index=True)
 
-with tabs[5]:
+with tabs[7]:
     st.markdown("<div class='section'>Real NAV + live position marks</div>",unsafe_allow_html=True)
     st.markdown("<div class='callout'><b>Modeled live marks.</b> Until venue feeds are connected, current marks below are Oriel prototype fair values. NAV reconciles committed capital, event-contract MTM, MEDUSDi MTM and accrued fees.</div>",unsafe_allow_html=True)
     nav_hedge_ratio=st.slider("MEDUSDi hedge ratio used in NAV",0,100,int(MEDUSDI_DEFAULTS["portfolio_hedge_ratio"]*100),5,key="nav_medusdi_ratio")/100
@@ -278,7 +486,7 @@ with tabs[5]:
     st.dataframe(marks,use_container_width=True,hide_index=True)
     st.caption("Short-YES mark convention: unrealized P&L = (entry price − current fair value) × notional. These are modeled marks, not live venue quotes.")
 
-with tabs[6]:
+with tabs[8]:
     st.markdown("<div class='section'>Expected loss / tranche-risk analytics</div>",unsafe_allow_html=True)
     st.markdown("<div class='callout'><b>Joint-loss model.</b> CARE-HRV-01 now compares the exact independent 64-state baseline with a correlated Gaussian-copula model. The correlated model preserves each event's modeled probability while allowing respiratory, inflation, reimbursement and specialty-drug risks to cluster.</div>",unsafe_allow_html=True)
 
@@ -373,7 +581,7 @@ with tabs[6]:
     else:
         st.error("Equity + Mezzanine leaves less than 5% for Senior.")
 
-with tabs[7]:
+with tabs[9]:
     st.markdown("<div class='section'>Cash & collateral dashboard</div>",unsafe_allow_html=True)
     c1,c2,c3=st.columns(3)
     with c1:
@@ -401,7 +609,7 @@ with tabs[7]:
     st.dataframe(release,use_container_width=True,hide_index=True)
     st.caption("Prototype assumes fully funded MEDUSDi spot hedges and event collateral equal to modeled capital at risk. Venue-specific collateral and treasury rules would replace these assumptions in production.")
 
-with tabs[8]:
+with tabs[10]:
     st.markdown("<div class='section'>Event-driven loss waterfall / investor-return simulator</div>",unsafe_allow_html=True)
     st.markdown("<div class='callout'><b>Actual modeled portfolio.</b> The waterfall is now driven by the six healthcare positions in CARE-HRV-01. Select which events trigger; triggered positions realize their modeled maximum loss, while non-triggered positions realize the modeled contract premium. Net portfolio P&L then flows through HRV-E → HRV-M → HRV-S.</div>",unsafe_allow_html=True)
 
@@ -576,7 +784,7 @@ with tabs[8]:
             st.dataframe(stress,use_container_width=True,hide_index=True)
             st.caption("This override is retained only for capital-structure stress testing beyond the current six-position portfolio.")
 
-with tabs[9]:
+with tabs[11]:
     st.markdown("<div class='section'>Tokenization / Investor Registry</div>",unsafe_allow_html=True)
     st.markdown("<div class='callout'><b>State-machine prototype.</b> HRV-S, HRV-M and HRV-E are modeled as permissioned digital records of economic interests in the regulated vault wrapper. The ledger demonstrates ownership, mint/burn lifecycle, wallet eligibility, NAV synchronization and distributions. It is not yet a deployed smart contract or official transfer-agent record.</div>",unsafe_allow_html=True)
 
@@ -707,7 +915,7 @@ with tabs[9]:
     st.markdown("<div class='dark'><b>On-chain boundary:</b> ownership record, class, token supply, NAV reference, mint/burn state, distribution entitlement and settlement-state references can be represented on-chain. Cash custody, event contracts, KYC/AML, tax records, official NAV approval and the legal investor register remain with regulated service providers.</div>",unsafe_allow_html=True)
     st.caption("Session-state prototype only: actions reset when the Streamlit session resets. No blockchain transaction is submitted and no legal ownership changes occur.")
 
-with tabs[10]:
+with tabs[12]:
     st.markdown("<div class='section'>Oriel reference architecture</div>",unsafe_allow_html=True)
     st.markdown("""
 **Oriel Workbench → standardized contract payload → CARE-HRV-01 capacity engine → venue execution → vault portfolio.**
