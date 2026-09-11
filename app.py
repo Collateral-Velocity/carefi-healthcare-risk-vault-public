@@ -57,7 +57,7 @@ from vault_engine import (
 def money(x: float) -> str:
     return "$" + f"{x:,.0f}"
 
-st.set_page_config(page_title="CareFi · Healthcare Risk Vault",page_icon="CF",layout="wide",initial_sidebar_state="collapsed")
+st.set_page_config(page_title="CareFi · Event Capacity Protocol",page_icon="CF",layout="wide",initial_sidebar_state="collapsed")
 
 st.markdown("""
 <style>
