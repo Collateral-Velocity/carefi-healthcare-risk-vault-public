@@ -19,6 +19,10 @@ from vault_engine import (
     WATERFALL_DEFAULTS,
     waterfall_simulation,
     waterfall_scenarios,
+    EVENT_SCENARIO_PRESETS,
+    event_portfolio_scenario,
+    waterfall_from_event_scenario,
+    event_waterfall_scenarios,
 )
 
 def money(x: float) -> str:
@@ -43,7 +47,7 @@ html,body,[class*="css"]{font-family:'DM Sans',sans-serif;color:#172033}
 </style>
 """,unsafe_allow_html=True)
 
-st.markdown("<div class='topbar'><div class='brand'>CARE<span>FI</span></div><div class='tag'>EVENT CAPACITY PROTOCOL · V0.4</div></div>",unsafe_allow_html=True)
+st.markdown("<div class='topbar'><div class='brand'>CARE<span>FI</span></div><div class='tag'>EVENT CAPACITY PROTOCOL · V0.5</div></div>",unsafe_allow_html=True)
 st.markdown("<div class='hero'><h1>"+CARE_HRV_01["name"]+"</h1><p>"+CARE_HRV_01["mandate"]+"</p></div>",unsafe_allow_html=True)
 
 metrics=portfolio_metrics(SAMPLE_PORTFOLIO,CARE_HRV_01["target_capital"])
@@ -205,8 +209,8 @@ with tabs[4]:
     st.dataframe(display,use_container_width=True,hide_index=True)
 
 with tabs[5]:
-    st.markdown("<div class='section'>Loss waterfall / investor-return simulator</div>",unsafe_allow_html=True)
-    st.markdown("<div class='callout'><b>Illustrative structure.</b> Portfolio principal losses are allocated first to HRV-E, then HRV-M, then HRV-S. Distributable income pays operating expenses first, then the Senior preference, then the Mezzanine preference, with residual income to Equity. These tranche sizes and preferred returns are modeling assumptions—not offering terms.</div>",unsafe_allow_html=True)
+    st.markdown("<div class='section'>Event-driven loss waterfall / investor-return simulator</div>",unsafe_allow_html=True)
+    st.markdown("<div class='callout'><b>Actual modeled portfolio.</b> The waterfall is now driven by the six healthcare positions in CARE-HRV-01. Select which events trigger; triggered positions realize their modeled maximum loss, while non-triggered positions realize the modeled contract premium. Net portfolio P&L then flows through HRV-E → HRV-M → HRV-S.</div>",unsafe_allow_html=True)
 
     cfg1,cfg2=st.columns([1,1],gap="large")
     with cfg1:
@@ -228,58 +232,82 @@ with tabs[5]:
         st.dataframe(structure,use_container_width=True,hide_index=True)
 
     with cfg2:
-        st.markdown("#### Income assumptions")
+        st.markdown("#### Distribution assumptions")
         senior_pref=st.slider("HRV-S preferred return",0.0,15.0,WATERFALL_DEFAULTS["senior_pref"]*100,0.5)/100
         mezz_pref=st.slider("HRV-M preferred return",0.0,25.0,WATERFALL_DEFAULTS["mezz_pref"]*100,0.5)/100
-        gross_income_rate=st.slider("Gross portfolio income before losses",0.0,30.0,WATERFALL_DEFAULTS["gross_income_rate"]*100,0.5)/100
         expense_rate=st.slider("Operating expenses / fees",0.0,5.0,WATERFALL_DEFAULTS["expense_rate"]*100,0.25)/100
+        st.caption("Portfolio gains/losses come from the six modeled event contracts. The preferred-return assumptions only control distribution of positive net portfolio P&L.")
 
     valid_structure=abs(equity_pct+mezz_pct+senior_pct-1.0)<1e-6 and senior_pct>=0.05
     if valid_structure:
-        st.markdown("#### Mild / moderate / severe stress")
-        scenario_df=waterfall_scenarios(
-            CARE_HRV_01["target_capital"],equity_pct,mezz_pct,senior_pct,
-            senior_pref,mezz_pref,gross_income_rate,expense_rate
+        st.markdown("#### Preset event combinations")
+        event_scenarios=event_waterfall_scenarios(
+            SAMPLE_PORTFOLIO,CARE_HRV_01["target_capital"],equity_pct,mezz_pct,senior_pct,
+            senior_pref,mezz_pref,expense_rate
         )
-        scenario_view=scenario_df[[
-            "scenario","tranche","portfolio_loss_pct","principal_loss_pct","cash_distribution","net_return"
-        ]].copy()
-        scenario_view["portfolio_loss_pct"]=scenario_view["portfolio_loss_pct"].map(lambda x:f"{x:.0%}")
-        scenario_view["principal_loss_pct"]=scenario_view["principal_loss_pct"].map(lambda x:f"{x:.1%}")
-        scenario_view["cash_distribution"]=scenario_view["cash_distribution"].map(money)
-        scenario_view["net_return"]=scenario_view["net_return"].map(lambda x:f"{x:+.1%}")
-        st.dataframe(scenario_view,use_container_width=True,hide_index=True)
+        scenario_summary=event_scenarios.groupby("scenario",as_index=False).agg(
+            trigger_count=("trigger_count","first"),
+            gross_trigger_losses=("gross_trigger_losses","first"),
+            nontrigger_gains=("nontrigger_gains","first"),
+            portfolio_net_pnl=("portfolio_net_pnl","first"),
+            principal_loss_pct=("principal_loss_pct","first"),
+        )
+        order={"Mild":0,"Moderate":1,"Severe":2}
+        scenario_summary["_order"]=scenario_summary["scenario"].map(order)
+        scenario_summary=scenario_summary.sort_values("_order").drop(columns="_order")
+        for col in ["gross_trigger_losses","nontrigger_gains","portfolio_net_pnl"]:
+            scenario_summary[col]=scenario_summary[col].map(money)
+        scenario_summary["principal_loss_pct"]=scenario_summary["principal_loss_pct"].map(lambda x:f"{x:.1%}")
+        scenario_summary.columns=["Scenario","Events triggered","Triggered-event losses","Non-trigger gains","Net portfolio P&L","Vault principal loss"]
+        st.dataframe(scenario_summary,use_container_width=True,hide_index=True)
 
+        returns=event_scenarios.copy()
         fig=px.bar(
-            scenario_df,
+            returns,
             x="scenario",
             y="net_return",
             color="tranche",
             barmode="group",
-            labels={"net_return":"Investor net return","scenario":"Scenario","tranche":"Class"},
+            category_orders={"scenario":["Mild","Moderate","Severe"],"tranche":["HRV-E","HRV-M","HRV-S"]},
+            labels={"net_return":"Investor net return","scenario":"Event scenario","tranche":"Class"},
         )
         fig.update_yaxes(tickformat=".0%")
         fig.update_layout(height=360,margin=dict(l=0,r=0,t=20,b=0),legend_title_text="")
         st.plotly_chart(fig,use_container_width=True,config={"displayModeBar":False})
 
-        st.markdown("#### Inspect one scenario")
-        scenario_name=st.selectbox("Scenario",["Mild","Moderate","Severe","Custom"])
-        if scenario_name=="Custom":
-            selected_loss=st.slider("Custom portfolio principal loss",0,100,40,1)/100
+        st.markdown("#### Build / inspect a trigger combination")
+        scenario_name=st.selectbox("Trigger set",["Mild","Moderate","Severe","Custom combination"])
+        position_names=list(SAMPLE_PORTFOLIO["position"])
+        if scenario_name=="Custom combination":
+            triggered=st.multiselect("Events that trigger",position_names,default=EVENT_SCENARIO_PRESETS["Moderate"])
         else:
-            selected_loss=WATERFALL_DEFAULTS["scenarios"][scenario_name]
+            triggered=EVENT_SCENARIO_PRESETS[scenario_name]
+            st.write("**Triggered:** "+("; ".join(triggered) if triggered else "None"))
 
-        detail=waterfall_simulation(
-            CARE_HRV_01["target_capital"],selected_loss,equity_pct,mezz_pct,senior_pct,
-            senior_pref,mezz_pref,gross_income_rate,expense_rate
+        event_result=event_portfolio_scenario(SAMPLE_PORTFOLIO,triggered)
+        wf=waterfall_from_event_scenario(
+            CARE_HRV_01["target_capital"],event_result,equity_pct,mezz_pct,senior_pct,
+            senior_pref,mezz_pref,expense_rate
         )
-        d1,d2,d3,d4=st.columns(4)
-        d1.metric("Portfolio loss",money(detail["portfolio_loss"]),f"{selected_loss:.0%} of capital")
-        d2.metric("Gross income",money(detail["gross_income"]))
-        d3.metric("Expenses",money(detail["expenses"]))
-        d4.metric("Net income to distribute",money(detail["net_income_before_waterfall"]))
 
-        detail_df=pd.DataFrame(detail["rows"])
+        k1,k2,k3,k4=st.columns(4)
+        k1.metric("Triggered-event losses",money(event_result["gross_trigger_losses"]))
+        k2.metric("Non-trigger gains",money(event_result["gross_nontrigger_gains"]))
+        k3.metric("Net portfolio P&L",money(event_result["net_pnl"]))
+        k4.metric("Vault principal loss",f"{wf['principal_loss_pct']:.1%}",money(wf["principal_loss"]))
+
+        outcome=pd.DataFrame(event_result["rows"])
+        outcome["Outcome"]=outcome["triggered"].map({True:"TRIGGERED",False:"No trigger"})
+        outcome["Notional"]=outcome["notional"].map(money)
+        outcome["Price"]=outcome["price"].map(lambda x:f"{x:.1%}")
+        outcome["Capital at risk"]=outcome["capital_at_risk"].map(money)
+        outcome["Realized P&L"]=outcome["realized_pnl"].map(money)
+        outcome=outcome[["position","risk_family","Outcome","Notional","Price","Capital at risk","Realized P&L"]]
+        outcome.columns=["Position","Risk family","Outcome","Notional","Entry price","Max loss / capital at risk","Realized P&L"]
+        st.dataframe(outcome,use_container_width=True,hide_index=True)
+
+        st.markdown("#### Investor waterfall")
+        detail_df=pd.DataFrame(wf["rows"])
         detail_df=detail_df[[
             "tranche","beginning_capital","principal_loss","ending_principal",
             "cash_distribution","net_pnl","net_return"
@@ -290,10 +318,20 @@ with tabs[5]:
         detail_df.columns=["Class","Beginning capital","Principal loss","Ending principal","Cash distribution","Net P&L","Investor return"]
         st.dataframe(detail_df,use_container_width=True,hide_index=True)
 
-        if detail["unallocated_loss"]>0:
-            st.error("Scenario losses exceed modeled vault capital by "+money(detail["unallocated_loss"])+".")
+        st.markdown("<div class='dark'><b>What the severe case now means:</b> Severe is not an arbitrary 60% loss. It assumes all six modeled healthcare events trigger. With the current $10M vault and modeled positions, maximum triggered-event loss is limited to the capital actually at risk in those six positions. That may impair Equity and Mezzanine without reaching Senior—which is precisely the diversification/capital-stack result the prototype should reveal rather than assume.</div>",unsafe_allow_html=True)
 
-        st.markdown("**Interpretation:** the same portfolio shock produces deliberately different investor outcomes. Equity absorbs first loss and receives residual upside; Mezzanine begins losing principal only after Equity is exhausted; Senior begins losing principal only after both junior layers are exhausted.")
+        with st.expander("Secondary arbitrary stress override"):
+            custom_loss=st.slider("Hypothetical vault principal loss",0,100,40,1,key="secondary_custom_loss")/100
+            custom_detail=waterfall_simulation(
+                CARE_HRV_01["target_capital"],custom_loss,equity_pct,mezz_pct,senior_pct,
+                senior_pref,mezz_pref,0.0,expense_rate
+            )
+            stress=pd.DataFrame(custom_detail["rows"])[["tranche","principal_loss_pct","net_return"]]
+            stress["principal_loss_pct"]=stress["principal_loss_pct"].map(lambda x:f"{x:.1%}")
+            stress["net_return"]=stress["net_return"].map(lambda x:f"{x:+.1%}")
+            stress.columns=["Class","Principal loss","Investor return"]
+            st.dataframe(stress,use_container_width=True,hide_index=True)
+            st.caption("This override is retained only for capital-structure stress testing beyond the current six-position portfolio.")
 
 with tabs[6]:
     st.markdown("<div class='section'>Illustrative digital interests</div>",unsafe_allow_html=True)
