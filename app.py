@@ -34,6 +34,8 @@ from vault_engine import (
     vault_nav,
     cash_collateral_dashboard,
     expected_loss_analytics,
+    correlation_matrix_frame,
+    correlated_loss_analytics,
 )
 
 def money(x: float) -> str:
@@ -58,7 +60,7 @@ html,body,[class*="css"]{font-family:'DM Sans',sans-serif;color:#172033}
 </style>
 """,unsafe_allow_html=True)
 
-st.markdown("<div class='topbar'><div class='brand'>CARE<span>FI</span></div><div class='tag'>HEALTHCARE EVENT RISK VAULT · V0.7</div></div>",unsafe_allow_html=True)
+st.markdown("<div class='topbar'><div class='brand'>CARE<span>FI</span></div><div class='tag'>HEALTHCARE EVENT RISK VAULT · V0.8</div></div>",unsafe_allow_html=True)
 st.markdown("<div class='hero'><h1>"+CARE_HRV_01["name"]+"</h1><p>"+CARE_HRV_01["mandate"]+"</p></div>",unsafe_allow_html=True)
 
 metrics=portfolio_metrics(SAMPLE_PORTFOLIO,CARE_HRV_01["target_capital"])
@@ -269,7 +271,8 @@ with tabs[5]:
 
 with tabs[6]:
     st.markdown("<div class='section'>Expected loss / tranche-risk analytics</div>",unsafe_allow_html=True)
-    st.markdown("<div class='callout'><b>Exact state enumeration.</b> With six event positions, the prototype evaluates all 64 trigger / no-trigger combinations using each position's modeled probability. This produces expected loss and tranche-impairment statistics without Monte Carlo noise.</div>",unsafe_allow_html=True)
+    st.markdown("<div class='callout'><b>Joint-loss model.</b> CARE-HRV-01 now compares the exact independent 64-state baseline with a correlated Gaussian-copula model. The correlated model preserves each event's modeled probability while allowing respiratory, inflation, reimbursement and specialty-drug risks to cluster.</div>",unsafe_allow_html=True)
+
     r1,r2,r3=st.columns(3)
     with r1:
         risk_equity=st.slider("Risk analytics HRV-E",5,50,20,1)/100
@@ -278,26 +281,86 @@ with tabs[6]:
     risk_senior=1.0-risk_equity-risk_mezz
     with r3:
         st.metric("Risk analytics HRV-S",f"{max(risk_senior,0):.0%}")
+
     if risk_senior >= 0.05:
-        risk_view=expected_loss_analytics(
+        baseline=expected_loss_analytics(
             SAMPLE_PORTFOLIO,CARE_HRV_01["target_capital"],risk_equity,risk_mezz,risk_senior,
             expense_rate=WATERFALL_DEFAULTS["expense_rate"]
         )
+
+        st.markdown("#### Correlation assumptions")
+        jc1,jc2=st.columns([1,1])
+        with jc1:
+            corr_scale=st.slider("Correlation strength",0,150,100,5)/100
+            sims=st.select_slider("Joint-loss simulations",options=[10000,20000,30000,50000],value=30000)
+            correlated=correlated_loss_analytics(
+                SAMPLE_PORTFOLIO,CARE_HRV_01["target_capital"],risk_equity,risk_mezz,risk_senior,
+                expense_rate=WATERFALL_DEFAULTS["expense_rate"],correlation_scale=corr_scale,
+                simulations=sims
+            )
+            cmetrics=pd.DataFrame([
+                ["Respiratory ↔ respiratory","High","TX and national flu can cluster"],
+                ["Healthcare PPI ↔ Medical CPI","High","Common medical-inflation factor"],
+                ["Inflation ↔ reimbursement","Moderate","Reimbursement adequacy vs cost trend"],
+                ["Inflation ↔ specialty drug","Moderate","Shared medical-cost factor"],
+                ["Respiratory ↔ inflation","Low","Different primary drivers"],
+            ],columns=["Dependency","Prototype level","Rationale"])
+            st.dataframe(cmetrics,use_container_width=True,hide_index=True)
+        with jc2:
+            corr_df=correlation_matrix_frame(SAMPLE_PORTFOLIO,corr_scale)
+            corr_display=corr_df.applymap(lambda x:f"{x:.2f}")
+            st.caption("Latent Gaussian correlation matrix")
+            st.dataframe(corr_display,use_container_width=True)
+
+        st.markdown("#### Independent vs. correlated portfolio risk")
+        comparison=pd.DataFrame([
+            ["Expected portfolio P&L",baseline["expected_portfolio_pnl"],correlated["expected_portfolio_pnl"]],
+            ["Expected principal loss",baseline["expected_principal_loss"],correlated["expected_principal_loss"]],
+            ["95% loss quantile",baseline["var95_loss"],correlated["var95_loss"]],
+            ["99% loss quantile",baseline["var99_loss"],correlated["var99_loss"]],
+        ],columns=["Metric","Independent","Correlated"])
+        comparison["Change"]=comparison["Correlated"]-comparison["Independent"]
+        for col in ["Independent","Correlated","Change"]:
+            comparison[col]=comparison[col].map(money)
+        st.dataframe(comparison,use_container_width=True,hide_index=True)
+
         e1,e2,e3,e4=st.columns(4)
-        e1.metric("Expected portfolio P&L",money(risk_view["expected_portfolio_pnl"]))
-        e2.metric("Expected principal loss",money(risk_view["expected_principal_loss"]),f"{risk_view['expected_principal_loss_pct']:.1%} NAV")
-        e3.metric("95% loss quantile",money(risk_view["var95_loss"]),f"{risk_view['var95_pct']:.1%} NAV")
-        e4.metric("99% loss quantile",money(risk_view["var99_loss"]),f"{risk_view['var99_pct']:.1%} NAV")
-        tr=[]
+        e1.metric("Correlated expected loss",money(correlated["expected_principal_loss"]),f"{correlated['expected_principal_loss_pct']:.1%} NAV")
+        e2.metric("Correlated 95% loss",money(correlated["var95_loss"]),f"{correlated['var95_pct']:.1%} NAV")
+        e3.metric("Correlated 99% loss",money(correlated["var99_loss"]),f"{correlated['var99_pct']:.1%} NAV")
+        e4.metric("95% expected shortfall",money(correlated["expected_shortfall95"]))
+
+        st.markdown("#### Joint-trigger risk")
+        j1,j2,j3,j4=st.columns(4)
+        j1.metric("P(2+ events trigger)",f"{correlated['prob_2plus_triggers']:.1%}")
+        j2.metric("P(3+ events trigger)",f"{correlated['prob_3plus_triggers']:.1%}")
+        j3.metric("P(4+ events trigger)",f"{correlated['prob_4plus_triggers']:.1%}")
+        j4.metric("Expected trigger count",f"{correlated['expected_trigger_count']:.2f}")
+
+        st.markdown("#### Tranche risk: independent vs correlated")
+        rows=[]
         for cls in ["HRV-E","HRV-M","HRV-S"]:
-            s=risk_view["tranches"][cls]
-            tr.append([cls,s["expected_loss"],s["expected_loss_pct"],s["impairment_probability"],s["wipeout_probability"]])
-        tr_df=pd.DataFrame(tr,columns=["Class","Expected loss","Expected loss %","Impairment probability","Wipeout probability"])
-        tr_df["Expected loss"]=tr_df["Expected loss"].map(money)
-        for col in ["Expected loss %","Impairment probability","Wipeout probability"]:
+            b=baseline["tranches"][cls]
+            c=correlated["tranches"][cls]
+            rows.append([
+                cls,
+                b["expected_loss"],c["expected_loss"],
+                b["impairment_probability"],c["impairment_probability"],
+                b["wipeout_probability"],c["wipeout_probability"],
+            ])
+        tr_df=pd.DataFrame(rows,columns=[
+            "Class","Independent EL","Correlated EL",
+            "Independent impairment","Correlated impairment",
+            "Independent wipeout","Correlated wipeout"
+        ])
+        for col in ["Independent EL","Correlated EL"]:
+            tr_df[col]=tr_df[col].map(money)
+        for col in ["Independent impairment","Correlated impairment","Independent wipeout","Correlated wipeout"]:
             tr_df[col]=tr_df[col].map(lambda x:f"{x:.2%}")
         st.dataframe(tr_df,use_container_width=True,hide_index=True)
-        st.warning(risk_view["assumption"]+" Correlation modeling is the next analytical refinement before these figures could support an investment decision.")
+
+        st.markdown("<div class='dark'><b>Why this matters:</b> correlation does not materially change each contract's standalone probability; it changes the likelihood that several contracts lose at the same time. That clustering is what threatens junior tranches and eventually Senior protection. The current matrix is an explicit prototype assumption and should be replaced with empirically calibrated dependence as CareFi accumulates history and Oriel/Tynbill data.</div>",unsafe_allow_html=True)
+        st.caption(correlated["assumption"])
     else:
         st.error("Equity + Mezzanine leaves less than 5% for Senior.")
 
