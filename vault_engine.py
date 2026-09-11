@@ -525,3 +525,195 @@ def medusdi_request_hedge(
 def medusdi_hedge_pnl(hedge_notional: float, medusdi_return: float) -> float:
     """Illustrative P&L from a long MEDUSDi hedge."""
     return float(hedge_notional)*float(medusdi_return)
+
+
+POSITION_MARKS = {
+    "Texas respiratory utilization": {"current_mark": 0.39, "settlement_date": "2028-06-30", "status": "Observing", "mark_source": "Oriel modeled fair value"},
+    "National influenza ED utilization": {"current_mark": 0.36, "settlement_date": "2028-06-30", "status": "Observing", "mark_source": "Oriel modeled fair value"},
+    "Healthcare services PPI shock": {"current_mark": 0.28, "settlement_date": "2028-03-31", "status": "Open", "mark_source": "Oriel modeled fair value"},
+    "Medical CPI acceleration": {"current_mark": 0.30, "settlement_date": "2028-02-15", "status": "Open", "mark_source": "Oriel modeled fair value"},
+    "Medicare reimbursement shortfall": {"current_mark": 0.25, "settlement_date": "2028-10-01", "status": "Open", "mark_source": "Oriel modeled fair value"},
+    "Specialty-drug utilization shock": {"current_mark": 0.32, "settlement_date": "2028-09-30", "status": "Structuring", "mark_source": "Oriel modeled fair value"},
+}
+
+TREASURY_ASSUMPTIONS = {
+    "liquidity_reserve_pct": 0.05,
+    "annual_cash_yield": 0.045,
+    "accrued_fee_pct": 0.005,
+    "medusdi_cost_basis": 1.0000,
+    "medusdi_current_mark": 1.0150,
+}
+
+def position_marks(portfolio: pd.DataFrame) -> pd.DataFrame:
+    """Modeled live-mark table. Short-YES MTM P&L = (entry price - current mark) * notional."""
+    rows=[]
+    for _, row in portfolio.iterrows():
+        name=str(row["position"])
+        meta=POSITION_MARKS.get(name,{})
+        current_mark=float(meta.get("current_mark",row["model_probability"]))
+        notional=float(row["notional"])
+        entry=float(row["price"])
+        mtm_pnl=(entry-current_mark)*notional
+        rows.append({
+            "position":name,
+            "risk_family":str(row["risk_family"]),
+            "geography":str(row["geography"]),
+            "entry_price":entry,
+            "oriel_fair_value":current_mark,
+            "unrealized_pnl":mtm_pnl,
+            "notional":notional,
+            "collateral_posted":float(row["capital_at_risk"]),
+            "settlement_date":str(meta.get("settlement_date","TBD")),
+            "status":str(meta.get("status","Open")),
+            "mark_source":str(meta.get("mark_source","Oriel modeled fair value")),
+        })
+    return pd.DataFrame(rows)
+
+def vault_nav(
+    portfolio: pd.DataFrame,
+    target_capital: float,
+    medusdi_hedge_ratio: float = 0.0,
+    liquidity_reserve_pct: float | None = None,
+    accrued_fee_pct: float | None = None,
+    medusdi_current_mark: float | None = None,
+    medusdi_cost_basis: float | None = None,
+) -> dict:
+    marks=position_marks(portfolio)
+    target=float(target_capital)
+    posted=float(marks["collateral_posted"].sum())
+    event_mtm=float(marks["unrealized_pnl"].sum())
+    beta=portfolio_healthcare_beta(portfolio,medusdi_hedge_ratio)
+    medusdi_notional=float(beta["medusdi_hedge_notional"])
+    cost=float(medusdi_cost_basis if medusdi_cost_basis is not None else TREASURY_ASSUMPTIONS["medusdi_cost_basis"])
+    mark=float(medusdi_current_mark if medusdi_current_mark is not None else TREASURY_ASSUMPTIONS["medusdi_current_mark"])
+    medusdi_units=medusdi_notional/cost if cost else 0.0
+    medusdi_value=medusdi_units*mark
+    medusdi_mtm=medusdi_value-medusdi_notional
+    reserve_pct=float(liquidity_reserve_pct if liquidity_reserve_pct is not None else TREASURY_ASSUMPTIONS["liquidity_reserve_pct"])
+    fee_pct=float(accrued_fee_pct if accrued_fee_pct is not None else TREASURY_ASSUMPTIONS["accrued_fee_pct"])
+    reserve=target*reserve_pct
+    accrued_fees=target*fee_pct
+    unencumbered=max(target-posted-medusdi_notional-reserve,0.0)
+    nav=target+event_mtm+medusdi_mtm-accrued_fees
+    return {
+        "nav":nav,
+        "nav_change":nav-target,
+        "target_capital":target,
+        "event_unrealized_pnl":event_mtm,
+        "medusdi_hedge_notional":medusdi_notional,
+        "medusdi_value":medusdi_value,
+        "medusdi_unrealized_pnl":medusdi_mtm,
+        "posted_collateral":posted,
+        "liquidity_reserve":reserve,
+        "unencumbered_cash":unencumbered,
+        "accrued_fees":accrued_fees,
+        "marks":marks,
+    }
+
+def cash_collateral_dashboard(
+    portfolio: pd.DataFrame,
+    target_capital: float,
+    medusdi_hedge_ratio: float,
+    liquidity_reserve_pct: float,
+    annual_cash_yield: float,
+) -> dict:
+    nav=vault_nav(
+        portfolio,target_capital,medusdi_hedge_ratio,
+        liquidity_reserve_pct=liquidity_reserve_pct,
+    )
+    cash=nav["unencumbered_cash"]
+    annual_yield=cash*max(float(annual_cash_yield),0.0)
+    collateral_release=[]
+    marks=nav["marks"]
+    for _, row in marks.iterrows():
+        collateral_release.append({
+            "position":row["position"],
+            "settlement_date":row["settlement_date"],
+            "collateral_expected_to_release":row["collateral_posted"],
+            "status":row["status"],
+        })
+    return {
+        **nav,
+        "annual_cash_yield_rate":annual_cash_yield,
+        "annual_cash_yield":annual_yield,
+        "collateral_release":pd.DataFrame(collateral_release),
+    }
+
+def _all_event_states(portfolio: pd.DataFrame) -> list[dict]:
+    """Exact 2^N independent-event state distribution for the current small portfolio."""
+    positions=list(portfolio["position"])
+    n=len(positions)
+    states=[]
+    for mask in range(1 << n):
+        triggered=[]
+        probability=1.0
+        for i,(_,row) in enumerate(portfolio.iterrows()):
+            p=float(row["model_probability"])
+            hit=bool(mask & (1 << i))
+            probability*=p if hit else (1.0-p)
+            if hit:
+                triggered.append(str(row["position"]))
+        result=event_portfolio_scenario(portfolio,triggered)
+        states.append({
+            "probability":probability,
+            "triggered":triggered,
+            "trigger_count":len(triggered),
+            "net_pnl":float(result["net_pnl"]),
+            "gross_trigger_losses":float(result["gross_trigger_losses"]),
+            "nontrigger_gains":float(result["gross_nontrigger_gains"]),
+        })
+    return states
+
+def expected_loss_analytics(
+    portfolio: pd.DataFrame,
+    total_capital: float,
+    equity_pct: float = 0.20,
+    mezz_pct: float = 0.30,
+    senior_pct: float = 0.50,
+    expense_rate: float = 0.01,
+) -> dict:
+    """Exact independent-event expected loss and tranche impairment analytics across all 64 states."""
+    states=_all_event_states(portfolio)
+    total=float(total_capital)
+    expected_portfolio_pnl=sum(s["probability"]*s["net_pnl"] for s in states)
+    loss_states=[]
+    tranche_stats={t:{"expected_loss":0.0,"impairment_probability":0.0,"wipeout_probability":0.0} for t in ["HRV-E","HRV-M","HRV-S"]}
+    for s in states:
+        result=waterfall_from_event_scenario(
+            total,s,equity_pct,mezz_pct,senior_pct,0.0,0.0,expense_rate,hedge_pnl=0.0
+        )
+        loss=float(result["principal_loss"])
+        loss_states.append((loss,s["probability"]))
+        for row in result["rows"]:
+            t=row["tranche"]
+            pl=float(row["principal_loss"])
+            begin=float(row["beginning_capital"])
+            tranche_stats[t]["expected_loss"]+=s["probability"]*pl
+            if pl > 0:
+                tranche_stats[t]["impairment_probability"]+=s["probability"]
+            if begin > 0 and pl >= begin-1e-9:
+                tranche_stats[t]["wipeout_probability"]+=s["probability"]
+    loss_states=sorted(loss_states,key=lambda x:x[0])
+    def quantile(q: float) -> float:
+        c=0.0
+        for loss,p in loss_states:
+            c+=p
+            if c>=q:
+                return loss
+        return loss_states[-1][0] if loss_states else 0.0
+    expected_principal_loss=sum(loss*p for loss,p in loss_states)
+    for t,stats in tranche_stats.items():
+        denom={"HRV-E":total*equity_pct,"HRV-M":total*mezz_pct,"HRV-S":total*senior_pct}[t]
+        stats["expected_loss_pct"]=stats["expected_loss"]/denom if denom else 0.0
+    return {
+        "expected_portfolio_pnl":expected_portfolio_pnl,
+        "expected_principal_loss":expected_principal_loss,
+        "expected_principal_loss_pct":expected_principal_loss/total if total else 0.0,
+        "var95_loss":quantile(0.95),
+        "var99_loss":quantile(0.99),
+        "var95_pct":quantile(0.95)/total if total else 0.0,
+        "var99_pct":quantile(0.99)/total if total else 0.0,
+        "tranches":tranche_stats,
+        "state_count":len(states),
+        "assumption":"Independent Bernoulli events using current modeled probabilities; no correlation adjustment.",
+    }
