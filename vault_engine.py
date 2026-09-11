@@ -365,8 +365,9 @@ def waterfall_from_event_scenario(
     senior_pref: float,
     mezz_pref: float,
     expense_rate: float,
+    hedge_pnl: float = 0.0,
 ) -> dict:
-    """Allocate realized six-position portfolio P&L through the CARE-HRV-01 capital stack."""
+    """Allocate realized six-position portfolio P&L through the CARE-HRV-01 capital stack, optionally including MEDUSDi hedge P&L."""
     weights=[float(equity_pct),float(mezz_pct),float(senior_pct)]
     if any(x < 0 for x in weights) or abs(sum(weights)-1.0) > 1e-6:
         raise ValueError("Tranche percentages must sum to 100%.")
@@ -377,7 +378,7 @@ def waterfall_from_event_scenario(
         "HRV-S":total*senior_pct,
     }
     expenses=total*max(float(expense_rate),0.0)
-    net_after_expenses=float(event_result["net_pnl"])-expenses
+    net_after_expenses=float(event_result["net_pnl"])+float(hedge_pnl)-expenses
     principal_loss=max(-net_after_expenses,0.0)
     distributable=max(net_after_expenses,0.0)
 
@@ -418,6 +419,7 @@ def waterfall_from_event_scenario(
         "gross_nontrigger_gains":float(event_result["gross_nontrigger_gains"]),
         "portfolio_net_pnl_before_expenses":float(event_result["net_pnl"]),
         "expenses":expenses,
+        "medusdi_hedge_pnl":float(hedge_pnl),
         "net_after_expenses":net_after_expenses,
         "principal_loss":principal_loss,
         "principal_loss_pct":principal_loss/total if total else 0.0,
@@ -452,3 +454,74 @@ def event_waterfall_scenarios(
                 **row,
             })
     return pd.DataFrame(records)
+
+
+MEDUSDI_DEFAULTS = {
+    "portfolio_hedge_ratio": 0.50,
+    "request_hedge_ratio": 0.70,
+    "scenario_returns": {"Mild": 0.03, "Moderate": 0.08, "Severe": 0.15},
+}
+
+POSITION_HEALTHCARE_BETA = {
+    "Texas respiratory utilization": 0.15,
+    "National influenza ED utilization": 0.15,
+    "Healthcare services PPI shock": 0.75,
+    "Medical CPI acceleration": 0.95,
+    "Medicare reimbursement shortfall": 0.45,
+    "Specialty-drug utilization shock": 0.65,
+}
+
+RISK_FAMILY_HEALTHCARE_BETA = {
+    "Respiratory Utilization": 0.15,
+    "Healthcare Inflation": 0.85,
+    "Reimbursement": 0.45,
+    "Pharmacy / Specialty": 0.65,
+}
+
+def portfolio_healthcare_beta(portfolio: pd.DataFrame, hedge_ratio: float = 0.0) -> dict:
+    """Illustrative healthcare-inflation factor exposure expressed in beta-adjusted dollars."""
+    detail=[]
+    gross=0.0
+    for _, row in portfolio.iterrows():
+        beta=float(POSITION_HEALTHCARE_BETA.get(str(row["position"]),0.25))
+        exposure=float(row["notional"])*beta
+        gross+=exposure
+        detail.append({
+            "position":str(row["position"]),
+            "risk_family":str(row["risk_family"]),
+            "notional":float(row["notional"]),
+            "healthcare_beta":beta,
+            "gross_beta_exposure":exposure,
+        })
+    ratio=min(max(float(hedge_ratio),0.0),1.0)
+    hedge_notional=gross*ratio
+    net=max(gross-hedge_notional,0.0)
+    return {
+        "gross_beta_exposure":gross,
+        "medusdi_hedge_notional":hedge_notional,
+        "net_beta_exposure":net,
+        "hedge_ratio":ratio,
+        "detail":detail,
+    }
+
+def medusdi_request_hedge(
+    eligible_notional: float,
+    risk_family: str,
+    hedge_ratio: float,
+    beta_override: float | None = None,
+) -> dict:
+    beta=float(beta_override) if beta_override is not None else float(RISK_FAMILY_HEALTHCARE_BETA.get(risk_family,0.25))
+    ratio=min(max(float(hedge_ratio),0.0),1.0)
+    gross=max(float(eligible_notional),0.0)*beta
+    hedge=gross*ratio
+    return {
+        "healthcare_beta":beta,
+        "gross_beta_exposure":gross,
+        "medusdi_hedge_notional":hedge,
+        "net_beta_exposure":max(gross-hedge,0.0),
+        "hedge_ratio":ratio,
+    }
+
+def medusdi_hedge_pnl(hedge_notional: float, medusdi_return: float) -> float:
+    """Illustrative P&L from a long MEDUSDi hedge."""
+    return float(hedge_notional)*float(medusdi_return)
