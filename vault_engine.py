@@ -662,7 +662,7 @@ def _all_event_states(portfolio: pd.DataFrame) -> list[dict]:
             "trigger_count":len(triggered),
             "net_pnl":float(result["net_pnl"]),
             "gross_trigger_losses":float(result["gross_trigger_losses"]),
-            "nontrigger_gains":float(result["gross_nontrigger_gains"]),
+            "gross_nontrigger_gains":float(result["gross_nontrigger_gains"]),
         })
     return states
 
