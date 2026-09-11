@@ -304,3 +304,151 @@ def waterfall_scenarios(
                 **row,
             })
     return pd.DataFrame(records)
+
+
+EVENT_SCENARIO_PRESETS = {
+    "Mild": ["Texas respiratory utilization"],
+    "Moderate": [
+        "Texas respiratory utilization",
+        "National influenza ED utilization",
+        "Healthcare services PPI shock",
+        "Medical CPI acceleration",
+    ],
+    "Severe": list(SAMPLE_PORTFOLIO["position"]),
+}
+
+def event_portfolio_scenario(portfolio: pd.DataFrame, triggered_positions: list[str]) -> dict:
+    """Resolve the six-position short-event portfolio for a selected set of triggered events.
+
+    If an event triggers, the modeled loss is capital_at_risk = (1-price) * notional.
+    If it does not trigger, the modeled gain is price * notional.
+    """
+    triggered=set(triggered_positions)
+    rows=[]
+    gross_trigger_losses=0.0
+    gross_nontrigger_gains=0.0
+    for _, row in portfolio.iterrows():
+        name=str(row["position"])
+        is_triggered=name in triggered
+        if is_triggered:
+            pnl=-float(row["capital_at_risk"])
+            gross_trigger_losses+=float(row["capital_at_risk"])
+        else:
+            pnl=float(row["price"])*float(row["notional"])
+            gross_nontrigger_gains+=pnl
+        rows.append({
+            "position":name,
+            "risk_family":str(row["risk_family"]),
+            "geography":str(row["geography"]),
+            "triggered":is_triggered,
+            "notional":float(row["notional"]),
+            "price":float(row["price"]),
+            "capital_at_risk":float(row["capital_at_risk"]),
+            "realized_pnl":pnl,
+        })
+    net_pnl=gross_nontrigger_gains-gross_trigger_losses
+    return {
+        "triggered_positions":list(triggered_positions),
+        "trigger_count":len(triggered),
+        "gross_trigger_losses":gross_trigger_losses,
+        "gross_nontrigger_gains":gross_nontrigger_gains,
+        "net_pnl":net_pnl,
+        "rows":rows,
+    }
+
+def waterfall_from_event_scenario(
+    total_capital: float,
+    event_result: dict,
+    equity_pct: float,
+    mezz_pct: float,
+    senior_pct: float,
+    senior_pref: float,
+    mezz_pref: float,
+    expense_rate: float,
+) -> dict:
+    """Allocate realized six-position portfolio P&L through the CARE-HRV-01 capital stack."""
+    weights=[float(equity_pct),float(mezz_pct),float(senior_pct)]
+    if any(x < 0 for x in weights) or abs(sum(weights)-1.0) > 1e-6:
+        raise ValueError("Tranche percentages must sum to 100%.")
+    total=float(total_capital)
+    balances={
+        "HRV-E":total*equity_pct,
+        "HRV-M":total*mezz_pct,
+        "HRV-S":total*senior_pct,
+    }
+    expenses=total*max(float(expense_rate),0.0)
+    net_after_expenses=float(event_result["net_pnl"])-expenses
+    principal_loss=max(-net_after_expenses,0.0)
+    distributable=max(net_after_expenses,0.0)
+
+    principal_losses, ending_principal=_allocate_loss(principal_loss,balances)
+    senior_pref_due=balances["HRV-S"]*max(float(senior_pref),0.0)
+    mezz_pref_due=balances["HRV-M"]*max(float(mezz_pref),0.0)
+    distributions={"HRV-S":0.0,"HRV-M":0.0,"HRV-E":0.0}
+
+    distributions["HRV-S"]=min(distributable,senior_pref_due)
+    distributable-=distributions["HRV-S"]
+    distributions["HRV-M"]=min(distributable,mezz_pref_due)
+    distributable-=distributions["HRV-M"]
+    distributions["HRV-E"]=max(distributable,0.0)
+
+    rows=[]
+    for tranche in ["HRV-E","HRV-M","HRV-S"]:
+        begin=balances[tranche]
+        loss=principal_losses[tranche]
+        end=ending_principal[tranche]
+        dist=distributions[tranche]
+        total_value=end+dist
+        net_pnl=total_value-begin
+        rows.append({
+            "tranche":tranche,
+            "beginning_capital":begin,
+            "principal_loss":loss,
+            "principal_loss_pct":loss/begin if begin else 0.0,
+            "ending_principal":end,
+            "cash_distribution":dist,
+            "ending_value_plus_distribution":total_value,
+            "net_pnl":net_pnl,
+            "net_return":net_pnl/begin if begin else 0.0,
+        })
+
+    return {
+        "total_capital":total,
+        "gross_trigger_losses":float(event_result["gross_trigger_losses"]),
+        "gross_nontrigger_gains":float(event_result["gross_nontrigger_gains"]),
+        "portfolio_net_pnl_before_expenses":float(event_result["net_pnl"]),
+        "expenses":expenses,
+        "net_after_expenses":net_after_expenses,
+        "principal_loss":principal_loss,
+        "principal_loss_pct":principal_loss/total if total else 0.0,
+        "rows":rows,
+    }
+
+def event_waterfall_scenarios(
+    portfolio: pd.DataFrame,
+    total_capital: float,
+    equity_pct: float,
+    mezz_pct: float,
+    senior_pct: float,
+    senior_pref: float,
+    mezz_pref: float,
+    expense_rate: float,
+) -> pd.DataFrame:
+    records=[]
+    for scenario,triggered in EVENT_SCENARIO_PRESETS.items():
+        event_result=event_portfolio_scenario(portfolio,triggered)
+        waterfall=waterfall_from_event_scenario(
+            total_capital,event_result,equity_pct,mezz_pct,senior_pct,
+            senior_pref,mezz_pref,expense_rate
+        )
+        for row in waterfall["rows"]:
+            records.append({
+                "scenario":scenario,
+                "trigger_count":event_result["trigger_count"],
+                "gross_trigger_losses":event_result["gross_trigger_losses"],
+                "nontrigger_gains":event_result["gross_nontrigger_gains"],
+                "portfolio_net_pnl":event_result["net_pnl"],
+                "principal_loss_pct":waterfall["principal_loss_pct"],
+                **row,
+            })
+    return pd.DataFrame(records)
