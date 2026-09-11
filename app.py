@@ -684,7 +684,9 @@ with tabs[8]:
             st.dataframe(cmetrics,use_container_width=True,hide_index=True)
         with jc2:
             corr_df=correlation_matrix_frame(SAMPLE_PORTFOLIO,corr_scale)
-            corr_display=corr_df.applymap(lambda x:f"{x:.2f}")
+            corr_display=corr_df.copy()
+            for col in corr_display.columns:
+                corr_display[col]=corr_display[col].map(lambda x:f"{x:.2f}")
             st.caption("Latent Gaussian correlation matrix")
             st.dataframe(corr_display,use_container_width=True)
 
