@@ -5,7 +5,7 @@ Prototype institutional capacity layer for healthcare event markets.
 ## CARE-HRV-01
 **CARE-HRV-01 · Healthcare Event Risk Vault 2027** demonstrates how diversified capital could warehouse objectively settled healthcare event risk originated by CareFi and referenced by Oriel.
 
-### V0.5
+### V0.6
 - Preloaded Texas respiratory-utilization contract from the Oriel Healthcare Event Risk Workbench.
 - Common Oriel-to-CareFi JSON contract schema.
 - Capacity decision with eligible notional, minimum price and capital consumed.
@@ -16,6 +16,9 @@ Prototype institutional capacity layer for healthcare event markets.
 - Interactive HRV-E / HRV-M / HRV-S loss-waterfall and investor-return simulator.
 - Event-driven stress engine tied directly to the six modeled healthcare positions; mild/moderate/severe scenarios are defined by actual trigger combinations, with non-trigger contract gains offsetting triggered-event losses.
 - Custom trigger-combination builder plus a secondary arbitrary capital-stress override.
+- MEDUSDi hedge toggle on capacity requests with gross, hedged and net healthcare-beta exposure.
+- Portfolio-level MEDUSDi healthcare-beta dashboard using explicit illustrative factor assumptions.
+- MEDUSDi-adjusted waterfall comparison showing tranche losses and investor returns with and without the hedge.
 
 ### Architecture
 - **Oriel** — public-print normalization, reference probability and valuation.
