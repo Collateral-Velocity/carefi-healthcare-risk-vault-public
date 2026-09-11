@@ -182,6 +182,16 @@ html,body,[class*="css"]{font-family:'DM Sans',sans-serif;color:#172033}
 .callout{background:#eaf6f1;border-left:4px solid #2d8f6f;padding:.8rem 1rem;border-radius:7px;font-size:.82rem}
 .dark{background:#101827;color:#dce4ee;border-radius:9px;padding:1rem;font-size:.82rem}
 [data-testid="stMetricValue"]{font-family:'DM Mono',monospace;font-size:1.35rem!important}
+.proto-card{background:#fff;border:1px solid #d9d5cc;border-radius:12px;padding:1rem;min-height:142px;box-shadow:0 1px 0 rgba(16,24,39,.03)}
+.proto-accent{border:1px solid #72bfa5;background:#eef8f4}
+.proto-kicker{font-size:.65rem;font-weight:800;letter-spacing:.09em;color:#748092;margin-bottom:.45rem}
+.proto-title{font-size:1rem;font-weight:800;color:#172033;margin-bottom:.4rem}
+.proto-copy{font-size:.78rem;line-height:1.5;color:#566174}
+.proto-arrow{text-align:center;font-size:1.8rem;color:#8190a3;padding-top:3rem}
+.proto-pool{display:flex;justify-content:space-between;gap:.5rem;padding:.35rem .45rem;margin-top:.28rem;border-radius:6px;background:#f3f4f6;font-size:.7rem;color:#697386}
+.proto-pool.active{background:#e6f4ef;color:#216b55}
+.proto-sidecar{background:#fff7e9;border:1px solid #e8c982;border-radius:12px;padding:1rem;min-height:112px}
+.proto-connector{text-align:center;font-size:1.35rem;color:#8190a3;line-height:1;margin:.2rem 0}
 </style>
 """,unsafe_allow_html=True)
 
@@ -264,31 +274,40 @@ with tabs[0]:
         st.plotly_chart(fig_alloc,use_container_width=True,config={"displayModeBar":False})
 
     st.markdown("#### Protocol flow")
-    node_labels=["Risk request","Oriel","CareFi Protocol"]+[p["pool_id"] for p in PROTOCOL_CAPITAL_POOLS]+["MEDUSDi","Venue","HRV-S / M / E","Investors"]
-    node_index={name:i for i,name in enumerate(node_labels)}
-    source=[node_index["Risk request"],node_index["Oriel"]]
-    target=[node_index["Oriel"],node_index["CareFi Protocol"]]
-    value=[routed["requested_notional"],routed["requested_notional"]]
-    for alloc in routed["allocations"]:
-        source.append(node_index["CareFi Protocol"])
-        target.append(node_index[alloc["pool_id"]])
-        value.append(alloc["allocated_notional"])
-        source.append(node_index[alloc["pool_id"]])
-        target.append(node_index["Venue"])
-        value.append(alloc["allocated_notional"])
-        if alloc["allocated_medusdi_hedge"]>0:
-            source.append(node_index[alloc["pool_id"]])
-            target.append(node_index["MEDUSDi"])
-            value.append(alloc["allocated_medusdi_hedge"])
-    source.extend([node_index["Venue"],node_index["HRV-S / M / E"]])
-    target.extend([node_index["HRV-S / M / E"],node_index["Investors"]])
-    value.extend([routed["assembled_capacity"],routed["assembled_capacity"]])
-    sankey=go.Figure(data=[go.Sankey(
-        node=dict(label=node_labels,pad=18,thickness=18),
-        link=dict(source=source,target=target,value=value),
-    )])
-    sankey.update_layout(height=420,margin=dict(l=0,r=0,t=20,b=10))
-    st.plotly_chart(sankey,use_container_width=True,config={"displayModeBar":False})
+    st.caption("Architecture view — the allocation table above carries the economics; this map shows who does what.")
+
+    flow1,arr1,flow2,arr2,flow3,arr3,flow4=st.columns([1.15,.18,1.05,.18,1.15,.18,1.35],gap="small")
+    with flow1:
+        st.markdown("<div class='proto-card'><div class='proto-kicker'>01 · ORIGINATION</div><div class='proto-title'>Risk request</div><div class='proto-copy'>"+money(routed["requested_notional"])+"<br>"+str(protocol_payload["risk_family"])+" · "+str(protocol_payload["geography"])+"</div></div>",unsafe_allow_html=True)
+    with arr1:
+        st.markdown("<div class='proto-arrow'>→</div>",unsafe_allow_html=True)
+    with flow2:
+        st.markdown("<div class='proto-card'><div class='proto-kicker'>02 · REFERENCE</div><div class='proto-title'>Oriel</div><div class='proto-copy'>Normalize trigger<br>Probability · basis · public print</div></div>",unsafe_allow_html=True)
+    with arr2:
+        st.markdown("<div class='proto-arrow'>→</div>",unsafe_allow_html=True)
+    with flow3:
+        st.markdown("<div class='proto-card proto-accent'><div class='proto-kicker'>03 · ROUTING</div><div class='proto-title'>CareFi Protocol</div><div class='proto-copy'>Validate · quote · allocate<br>Blended min "+(f"{routed['blended_price']:.1%}" if routed["assembled_capacity"] else "—")+"</div></div>",unsafe_allow_html=True)
+    with arr3:
+        st.markdown("<div class='proto-arrow'>→</div>",unsafe_allow_html=True)
+    with flow4:
+        pool_lines=[]
+        allocated_ids={a["pool_id"] for a in routed["allocations"]}
+        for pool in PROTOCOL_CAPITAL_POOLS:
+            alloc=next((a for a in routed["allocations"] if a["pool_id"]==pool["pool_id"]),None)
+            if alloc:
+                pool_lines.append("<div class='proto-pool active'><b>"+pool["pool_id"]+"</b><span>"+money(alloc["allocated_notional"])+"</span></div>")
+            else:
+                pool_lines.append("<div class='proto-pool'><b>"+pool["pool_id"]+"</b><span>not allocated</span></div>")
+        st.markdown("<div class='proto-card'><div class='proto-kicker'>04 · CAPITAL</div><div class='proto-title'>Capacity pools</div>"+"".join(pool_lines)+"</div>",unsafe_allow_html=True)
+
+    st.markdown("<div class='proto-connector'>↓</div>",unsafe_allow_html=True)
+    lower1,lower2,lower3=st.columns([1,1,1],gap="medium")
+    with lower1:
+        st.markdown("<div class='proto-sidecar'><div class='proto-kicker'>HEDGE SIDECAR</div><div class='proto-title'>MEDUSDi</div><div class='proto-copy'>"+money(routed["blended_medusdi_hedge"])+" modeled healthcare-inflation overlay</div></div>",unsafe_allow_html=True)
+    with lower2:
+        st.markdown("<div class='proto-card'><div class='proto-kicker'>05 · EXECUTION</div><div class='proto-title'>Venue / collateral</div><div class='proto-copy'>"+money(routed["assembled_capacity"])+" routed to execution<br>Collateralized · observing</div></div>",unsafe_allow_html=True)
+    with lower3:
+        st.markdown("<div class='proto-card'><div class='proto-kicker'>06 · INVESTOR ECONOMICS</div><div class='proto-title'>HRV-S · HRV-M · HRV-E</div><div class='proto-copy'>NAV · waterfall · token ledger<br>Settlement → distributions</div></div>",unsafe_allow_html=True)
 
     lifecycle=pd.DataFrame(PROTOCOL_LIFECYCLE,columns=["State","Responsible layer"])
     st.markdown("#### Canonical lifecycle")
