@@ -179,3 +179,128 @@ INELIGIBLE_RULES = [
     "No defined source-disruption fallback.",
     "Settlement materially controlled by the protection buyer or seller.",
 ]
+
+
+WATERFALL_DEFAULTS = {
+    "equity_pct": 0.20,
+    "mezz_pct": 0.30,
+    "senior_pct": 0.50,
+    "senior_pref": 0.06,
+    "mezz_pref": 0.10,
+    "gross_income_rate": 0.12,
+    "expense_rate": 0.01,
+    "scenarios": {
+        "Mild": 0.08,
+        "Moderate": 0.30,
+        "Severe": 0.60,
+    },
+}
+
+def _allocate_loss(amount: float, balances: dict[str, float]) -> tuple[dict[str, float], dict[str, float]]:
+    """Allocate portfolio losses first to Equity, then Mezzanine, then Senior."""
+    remaining=max(float(amount),0.0)
+    losses={"HRV-E":0.0,"HRV-M":0.0,"HRV-S":0.0}
+    ending=balances.copy()
+    for tranche in ["HRV-E","HRV-M","HRV-S"]:
+        hit=min(ending[tranche],remaining)
+        losses[tranche]=hit
+        ending[tranche]-=hit
+        remaining-=hit
+    return losses, ending
+
+def waterfall_simulation(
+    total_capital: float,
+    portfolio_loss_pct: float,
+    equity_pct: float,
+    mezz_pct: float,
+    senior_pct: float,
+    senior_pref: float,
+    mezz_pref: float,
+    gross_income_rate: float,
+    expense_rate: float,
+) -> dict:
+    """Illustrative annual waterfall: principal losses E→M→S; distributable income expenses→S pref→M pref→E residual."""
+    weights=[float(equity_pct),float(mezz_pct),float(senior_pct)]
+    if any(x < 0 for x in weights) or abs(sum(weights)-1.0) > 1e-6:
+        raise ValueError("Tranche percentages must sum to 100%.")
+    total=float(total_capital)
+    balances={
+        "HRV-E": total*equity_pct,
+        "HRV-M": total*mezz_pct,
+        "HRV-S": total*senior_pct,
+    }
+    portfolio_loss=total*max(float(portfolio_loss_pct),0.0)
+    principal_losses, ending_principal=_allocate_loss(portfolio_loss,balances)
+
+    gross_income=total*max(float(gross_income_rate),0.0)
+    expenses=total*max(float(expense_rate),0.0)
+    distributable=max(gross_income-expenses,0.0)
+
+    senior_pref_due=balances["HRV-S"]*max(float(senior_pref),0.0)
+    mezz_pref_due=balances["HRV-M"]*max(float(mezz_pref),0.0)
+    distributions={"HRV-S":0.0,"HRV-M":0.0,"HRV-E":0.0}
+
+    distributions["HRV-S"]=min(distributable,senior_pref_due)
+    distributable-=distributions["HRV-S"]
+    distributions["HRV-M"]=min(distributable,mezz_pref_due)
+    distributable-=distributions["HRV-M"]
+    distributions["HRV-E"]=max(distributable,0.0)
+
+    rows=[]
+    for tranche in ["HRV-E","HRV-M","HRV-S"]:
+        begin=balances[tranche]
+        loss=principal_losses[tranche]
+        end=ending_principal[tranche]
+        dist=distributions[tranche]
+        total_value=end+dist
+        net_pnl=total_value-begin
+        net_return=(net_pnl/begin) if begin else 0.0
+        principal_loss_pct=(loss/begin) if begin else 0.0
+        rows.append({
+            "tranche":tranche,
+            "beginning_capital":begin,
+            "principal_loss":loss,
+            "principal_loss_pct":principal_loss_pct,
+            "ending_principal":end,
+            "cash_distribution":dist,
+            "ending_value_plus_distribution":total_value,
+            "net_pnl":net_pnl,
+            "net_return":net_return,
+        })
+
+    return {
+        "total_capital":total,
+        "portfolio_loss":portfolio_loss,
+        "portfolio_loss_pct":portfolio_loss_pct,
+        "gross_income":gross_income,
+        "expenses":expenses,
+        "net_income_before_waterfall":max(gross_income-expenses,0.0),
+        "unallocated_loss":max(portfolio_loss-total,0.0),
+        "rows":rows,
+    }
+
+def waterfall_scenarios(
+    total_capital: float,
+    equity_pct: float,
+    mezz_pct: float,
+    senior_pct: float,
+    senior_pref: float,
+    mezz_pref: float,
+    gross_income_rate: float,
+    expense_rate: float,
+    scenarios: dict[str,float] | None = None,
+) -> pd.DataFrame:
+    scenarios=scenarios or WATERFALL_DEFAULTS["scenarios"]
+    records=[]
+    for name,loss_pct in scenarios.items():
+        result=waterfall_simulation(
+            total_capital,loss_pct,equity_pct,mezz_pct,senior_pct,
+            senior_pref,mezz_pref,gross_income_rate,expense_rate
+        )
+        for row in result["rows"]:
+            records.append({
+                "scenario":name,
+                "portfolio_loss_pct":loss_pct,
+                **row,
+            })
+    return pd.DataFrame(records)
