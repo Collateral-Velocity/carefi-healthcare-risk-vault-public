@@ -28,6 +28,12 @@ from vault_engine import (
     portfolio_healthcare_beta,
     medusdi_request_hedge,
     medusdi_hedge_pnl,
+    POSITION_MARKS,
+    TREASURY_ASSUMPTIONS,
+    position_marks,
+    vault_nav,
+    cash_collateral_dashboard,
+    expected_loss_analytics,
 )
 
 def money(x: float) -> str:
@@ -52,7 +58,7 @@ html,body,[class*="css"]{font-family:'DM Sans',sans-serif;color:#172033}
 </style>
 """,unsafe_allow_html=True)
 
-st.markdown("<div class='topbar'><div class='brand'>CARE<span>FI</span></div><div class='tag'>HEALTHCARE EVENT RISK VAULT · V0.6</div></div>",unsafe_allow_html=True)
+st.markdown("<div class='topbar'><div class='brand'>CARE<span>FI</span></div><div class='tag'>HEALTHCARE EVENT RISK VAULT · V0.7</div></div>",unsafe_allow_html=True)
 st.markdown("<div class='hero'><h1>"+CARE_HRV_01["name"]+"</h1><p>"+CARE_HRV_01["mandate"]+"</p></div>",unsafe_allow_html=True)
 
 metrics=portfolio_metrics(SAMPLE_PORTFOLIO,CARE_HRV_01["target_capital"])
@@ -63,7 +69,7 @@ m3.metric("Available capacity",money(metrics["available"]))
 m4.metric("Weighted event probability",f"{metrics['weighted_probability']:.1%}")
 m5.metric("Indicative portfolio yield",f"{metrics['indicative_yield']:.1%}")
 
-tabs=st.tabs(["Vault Overview","Mandate & Terms","Request Capacity","Portfolio Impact","Portfolio","Waterfall Simulator","Tokenized Interests","Oriel Reference Layer"])
+tabs=st.tabs(["Vault Overview","Mandate & Terms","Request Capacity","Portfolio Impact","Portfolio","NAV & Marks","Risk Analytics","Cash & Collateral","Waterfall Simulator","Tokenized Interests","Oriel Reference Layer"])
 
 with tabs[0]:
     st.markdown("<div class='section'>Mandate & controls</div>",unsafe_allow_html=True)
@@ -242,6 +248,88 @@ with tabs[4]:
     st.dataframe(display,use_container_width=True,hide_index=True)
 
 with tabs[5]:
+    st.markdown("<div class='section'>Real NAV + live position marks</div>",unsafe_allow_html=True)
+    st.markdown("<div class='callout'><b>Modeled live marks.</b> Until venue feeds are connected, current marks below are Oriel prototype fair values. NAV reconciles committed capital, event-contract MTM, MEDUSDi MTM and accrued fees.</div>",unsafe_allow_html=True)
+    nav_hedge_ratio=st.slider("MEDUSDi hedge ratio used in NAV",0,100,int(MEDUSDI_DEFAULTS["portfolio_hedge_ratio"]*100),5,key="nav_medusdi_ratio")/100
+    nav_view=vault_nav(SAMPLE_PORTFOLIO,CARE_HRV_01["target_capital"],nav_hedge_ratio)
+    n1,n2,n3,n4,n5=st.columns(5)
+    n1.metric("Current NAV",money(nav_view["nav"]),money(nav_view["nav_change"]))
+    n2.metric("Event MTM",money(nav_view["event_unrealized_pnl"]))
+    n3.metric("MEDUSDi MTM",money(nav_view["medusdi_unrealized_pnl"]))
+    n4.metric("Posted collateral",money(nav_view["posted_collateral"]))
+    n5.metric("Unencumbered cash",money(nav_view["unencumbered_cash"]))
+    marks=nav_view["marks"].copy()
+    marks["entry_price"]=marks["entry_price"].map(lambda x:f"{x:.1%}")
+    marks["oriel_fair_value"]=marks["oriel_fair_value"].map(lambda x:f"{x:.1%}")
+    for col in ["unrealized_pnl","notional","collateral_posted"]:
+        marks[col]=marks[col].map(money)
+    marks.columns=["Position","Risk family","Geography","Entry price","Current Oriel mark","Unrealized P&L","Notional","Collateral posted","Settlement date","Status","Mark source"]
+    st.dataframe(marks,use_container_width=True,hide_index=True)
+    st.caption("Short-YES mark convention: unrealized P&L = (entry price − current fair value) × notional. These are modeled marks, not live venue quotes.")
+
+with tabs[6]:
+    st.markdown("<div class='section'>Expected loss / tranche-risk analytics</div>",unsafe_allow_html=True)
+    st.markdown("<div class='callout'><b>Exact state enumeration.</b> With six event positions, the prototype evaluates all 64 trigger / no-trigger combinations using each position's modeled probability. This produces expected loss and tranche-impairment statistics without Monte Carlo noise.</div>",unsafe_allow_html=True)
+    r1,r2,r3=st.columns(3)
+    with r1:
+        risk_equity=st.slider("Risk analytics HRV-E",5,50,20,1)/100
+    with r2:
+        risk_mezz=st.slider("Risk analytics HRV-M",5,60,30,1)/100
+    risk_senior=1.0-risk_equity-risk_mezz
+    with r3:
+        st.metric("Risk analytics HRV-S",f"{max(risk_senior,0):.0%}")
+    if risk_senior >= 0.05:
+        risk_view=expected_loss_analytics(
+            SAMPLE_PORTFOLIO,CARE_HRV_01["target_capital"],risk_equity,risk_mezz,risk_senior,
+            expense_rate=WATERFALL_DEFAULTS["expense_rate"]
+        )
+        e1,e2,e3,e4=st.columns(4)
+        e1.metric("Expected portfolio P&L",money(risk_view["expected_portfolio_pnl"]))
+        e2.metric("Expected principal loss",money(risk_view["expected_principal_loss"]),f"{risk_view['expected_principal_loss_pct']:.1%} NAV")
+        e3.metric("95% loss quantile",money(risk_view["var95_loss"]),f"{risk_view['var95_pct']:.1%} NAV")
+        e4.metric("99% loss quantile",money(risk_view["var99_loss"]),f"{risk_view['var99_pct']:.1%} NAV")
+        tr=[]
+        for cls in ["HRV-E","HRV-M","HRV-S"]:
+            s=risk_view["tranches"][cls]
+            tr.append([cls,s["expected_loss"],s["expected_loss_pct"],s["impairment_probability"],s["wipeout_probability"]])
+        tr_df=pd.DataFrame(tr,columns=["Class","Expected loss","Expected loss %","Impairment probability","Wipeout probability"])
+        tr_df["Expected loss"]=tr_df["Expected loss"].map(money)
+        for col in ["Expected loss %","Impairment probability","Wipeout probability"]:
+            tr_df[col]=tr_df[col].map(lambda x:f"{x:.2%}")
+        st.dataframe(tr_df,use_container_width=True,hide_index=True)
+        st.warning(risk_view["assumption"]+" Correlation modeling is the next analytical refinement before these figures could support an investment decision.")
+    else:
+        st.error("Equity + Mezzanine leaves less than 5% for Senior.")
+
+with tabs[7]:
+    st.markdown("<div class='section'>Cash & collateral dashboard</div>",unsafe_allow_html=True)
+    c1,c2,c3=st.columns(3)
+    with c1:
+        collateral_hedge_ratio=st.slider("MEDUSDi funded hedge ratio",0,100,int(MEDUSDI_DEFAULTS["portfolio_hedge_ratio"]*100),5,key="cash_medusdi_ratio")/100
+    with c2:
+        reserve_pct=st.slider("Liquidity reserve",0,20,int(TREASURY_ASSUMPTIONS["liquidity_reserve_pct"]*100),1)/100
+    with c3:
+        cash_yield=st.slider("Annual cash / T-bill yield",0.0,8.0,TREASURY_ASSUMPTIONS["annual_cash_yield"]*100,0.25)/100
+    cash_view=cash_collateral_dashboard(
+        SAMPLE_PORTFOLIO,CARE_HRV_01["target_capital"],collateral_hedge_ratio,reserve_pct,cash_yield
+    )
+    c4,c5,c6,c7=st.columns(4)
+    c4.metric("Posted event collateral",money(cash_view["posted_collateral"]))
+    c5.metric("Funded MEDUSDi hedge",money(cash_view["medusdi_hedge_notional"]))
+    c6.metric("Liquidity reserve",money(cash_view["liquidity_reserve"]))
+    c7.metric("Free cash",money(cash_view["unencumbered_cash"]))
+    y1,y2,y3=st.columns(3)
+    y1.metric("Modeled annual cash yield",money(cash_view["annual_cash_yield"]),f"{cash_yield:.2%}")
+    y2.metric("Collateral utilization",f"{cash_view['posted_collateral']/CARE_HRV_01['target_capital']:.1%}")
+    y3.metric("Free-liquidity ratio",f"{cash_view['unencumbered_cash']/CARE_HRV_01['target_capital']:.1%}")
+    release=cash_view["collateral_release"].copy()
+    release["collateral_expected_to_release"]=release["collateral_expected_to_release"].map(money)
+    release.columns=["Position","Expected settlement / release","Collateral expected to release","Status"]
+    st.markdown("#### Collateral release ladder")
+    st.dataframe(release,use_container_width=True,hide_index=True)
+    st.caption("Prototype assumes fully funded MEDUSDi spot hedges and event collateral equal to modeled capital at risk. Venue-specific collateral and treasury rules would replace these assumptions in production.")
+
+with tabs[8]:
     st.markdown("<div class='section'>Event-driven loss waterfall / investor-return simulator</div>",unsafe_allow_html=True)
     st.markdown("<div class='callout'><b>Actual modeled portfolio.</b> The waterfall is now driven by the six healthcare positions in CARE-HRV-01. Select which events trigger; triggered positions realize their modeled maximum loss, while non-triggered positions realize the modeled contract premium. Net portfolio P&L then flows through HRV-E → HRV-M → HRV-S.</div>",unsafe_allow_html=True)
 
@@ -416,7 +504,7 @@ with tabs[5]:
             st.dataframe(stress,use_container_width=True,hide_index=True)
             st.caption("This override is retained only for capital-structure stress testing beyond the current six-position portfolio.")
 
-with tabs[6]:
+with tabs[9]:
     st.markdown("<div class='section'>Illustrative digital interests</div>",unsafe_allow_html=True)
     st.markdown("""
 The blockchain layer records vault ownership, subscriptions, NAV, deployed collateral, loss allocation and distributions. The prototype does **not** assume unrestricted secondary trading.
@@ -430,7 +518,7 @@ The blockchain layer records vault ownership, subscriptions, NAV, deployed colla
 A regulated CPO/SPV or equivalent institutional wrapper would remain the legal capital vehicle. The token is the programmable accounting and ownership layer—not a substitute for regulated execution, clearing or fund governance.
 """)
 
-with tabs[7]:
+with tabs[10]:
     st.markdown("<div class='section'>Oriel reference architecture</div>",unsafe_allow_html=True)
     st.markdown("""
 **Oriel Workbench → standardized contract payload → CARE-HRV-01 capacity engine → venue execution → vault portfolio.**
