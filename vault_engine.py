@@ -854,3 +854,87 @@ def correlated_loss_analytics(
         "expected_trigger_count":float(trigger_count.mean()),
         "assumption":"Gaussian-copula joint-trigger model preserving modeled marginal event probabilities; correlation inputs are prototype assumptions, not yet empirically calibrated.",
     }
+
+
+TOKEN_CLASS_TERMS = {
+    "HRV-S": {"name":"Senior Participation","target_pct":0.50,"initial_nav_per_token":1.00,"distribution_priority":1,"loss_priority":3,"transfer_policy":"Permissioned / whitelist only","lockup_days":180,"role":"Senior capital; last-loss protection layer"},
+    "HRV-M": {"name":"Mezzanine Participation","target_pct":0.30,"initial_nav_per_token":1.00,"distribution_priority":2,"loss_priority":2,"transfer_policy":"Permissioned / whitelist only","lockup_days":180,"role":"Intermediate risk / return layer"},
+    "HRV-E": {"name":"Equity / First-Loss Participation","target_pct":0.20,"initial_nav_per_token":1.00,"distribution_priority":3,"loss_priority":1,"transfer_policy":"Permissioned / whitelist only","lockup_days":180,"role":"First-loss capital; residual economics"},
+}
+
+TOKEN_LIFECYCLE = ["KYC_PENDING","WHITELISTED","SUBSCRIPTION_ACCEPTED","FUNDS_RECEIVED","MINTED","ACTIVE","DISTRIBUTION_DUE","REDEMPTION_APPROVED","BURNED"]
+
+DEFAULT_INVESTOR_REGISTRY = [
+    {"wallet":"0x7A1C...91F2","investor":"Institutional Account A","jurisdiction":"US","eligibility":"Approved","whitelisted":True,"lockup_status":"Locked","class":"HRV-S","tokens":1_500_000.0,"state":"ACTIVE"},
+    {"wallet":"0x8B43...0C17","investor":"Institutional Account B","jurisdiction":"US","eligibility":"Approved","whitelisted":True,"lockup_status":"Locked","class":"HRV-S","tokens":1_000_000.0,"state":"ACTIVE"},
+    {"wallet":"0x2D91...8A55","investor":"Institutional Account C","jurisdiction":"US","eligibility":"Approved","whitelisted":True,"lockup_status":"Locked","class":"HRV-M","tokens":1_250_000.0,"state":"ACTIVE"},
+    {"wallet":"0x5EF0...4B21","investor":"Institutional Account D","jurisdiction":"US","eligibility":"Approved","whitelisted":True,"lockup_status":"Locked","class":"HRV-M","tokens":500_000.0,"state":"ACTIVE"},
+    {"wallet":"0x9C11...AA73","investor":"Sponsor / First-Loss Account","jurisdiction":"US","eligibility":"Approved","whitelisted":True,"lockup_status":"Locked","class":"HRV-E","tokens":1_250_000.0,"state":"ACTIVE"},
+    {"wallet":"0x44AD...71BE","investor":"Prospective Account E","jurisdiction":"US","eligibility":"Pending","whitelisted":False,"lockup_status":"N/A","class":"HRV-S","tokens":0.0,"state":"KYC_PENDING"},
+]
+
+def token_class_economics(total_capital: float, vault_current_nav: float, class_pcts: dict[str,float] | None = None) -> pd.DataFrame:
+    pcts=class_pcts or {k:v["target_pct"] for k,v in TOKEN_CLASS_TERMS.items()}
+    rows=[]
+    for cls in ["HRV-S","HRV-M","HRV-E"]:
+        terms=TOKEN_CLASS_TERMS[cls]
+        pct=float(pcts.get(cls,terms["target_pct"]))
+        issued_capital=float(total_capital)*pct
+        supply=issued_capital/float(terms["initial_nav_per_token"]) if terms["initial_nav_per_token"] else 0.0
+        class_nav=float(vault_current_nav)*pct
+        nav_per_token=class_nav/supply if supply else 0.0
+        rows.append({"class":cls,"role":terms["role"],"target_pct":pct,"issued_capital":issued_capital,"token_supply":supply,"class_nav":class_nav,"nav_per_token":nav_per_token,"transfer_policy":terms["transfer_policy"],"lockup_days":terms["lockup_days"],"distribution_priority":terms["distribution_priority"],"loss_priority":terms["loss_priority"]})
+    return pd.DataFrame(rows)
+
+def registry_frame(registry: list[dict] | None = None) -> pd.DataFrame:
+    return pd.DataFrame(copy.deepcopy(registry or DEFAULT_INVESTOR_REGISTRY))
+
+def registry_summary(registry: list[dict] | None = None) -> dict:
+    df=registry_frame(registry)
+    active=df[df["tokens"]>0]
+    return {"wallets":int(len(df)),"approved_wallets":int(df["whitelisted"].sum()),"active_holders":int(len(active)),"tokens_outstanding":float(active["tokens"].sum()),"pending_wallets":int((~df["whitelisted"]).sum())}
+
+def mint_tokens(registry: list[dict], wallet: str, token_class: str, cash_amount: float, nav_per_token: float) -> tuple[list[dict],dict]:
+    updated=copy.deepcopy(registry)
+    wallet_index=next((i for i,r in enumerate(updated) if r["wallet"]==wallet),None)
+    if wallet_index is None: raise ValueError("Wallet not found in registry.")
+    row=updated[wallet_index]
+    if not row.get("whitelisted") or row.get("eligibility")!="Approved": raise ValueError("Wallet is not approved / whitelisted.")
+    if token_class not in TOKEN_CLASS_TERMS: raise ValueError("Unknown token class.")
+    if cash_amount <= 0 or nav_per_token <= 0: raise ValueError("Cash amount and NAV per token must be positive.")
+    if row.get("class") not in [token_class,""]: raise ValueError("Prototype registry assigns one token class per wallet.")
+    tokens=float(cash_amount)/float(nav_per_token)
+    row["class"]=token_class; row["tokens"]=float(row.get("tokens",0.0))+tokens; row["state"]="ACTIVE"; row["lockup_status"]="Locked"
+    event={"action":"MINT","wallet":wallet,"class":token_class,"cash_amount":float(cash_amount),"nav_per_token":float(nav_per_token),"tokens":tokens,"state_path":"SUBSCRIPTION_ACCEPTED → FUNDS_RECEIVED → MINTED → ACTIVE"}
+    return updated,event
+
+def burn_tokens(registry: list[dict], wallet: str, token_amount: float, nav_per_token: float) -> tuple[list[dict],dict]:
+    updated=copy.deepcopy(registry)
+    wallet_index=next((i for i,r in enumerate(updated) if r["wallet"]==wallet),None)
+    if wallet_index is None: raise ValueError("Wallet not found in registry.")
+    row=updated[wallet_index]
+    held=float(row.get("tokens",0.0)); burn=float(token_amount)
+    if burn <= 0 or burn > held: raise ValueError("Burn amount must be positive and cannot exceed wallet balance.")
+    row["tokens"]=held-burn; row["state"]="BURNED" if row["tokens"] <= 1e-9 else "ACTIVE"
+    proceeds=burn*float(nav_per_token)
+    event={"action":"BURN","wallet":wallet,"class":row["class"],"tokens":burn,"nav_per_token":float(nav_per_token),"redemption_proceeds":proceeds,"state_path":"REDEMPTION_APPROVED → BURNED"}
+    return updated,event
+
+def whitelist_wallet(registry: list[dict], wallet: str) -> tuple[list[dict],dict]:
+    updated=copy.deepcopy(registry)
+    wallet_index=next((i for i,r in enumerate(updated) if r["wallet"]==wallet),None)
+    if wallet_index is None: raise ValueError("Wallet not found in registry.")
+    row=updated[wallet_index]; row["eligibility"]="Approved"; row["whitelisted"]=True; row["state"]="WHITELISTED"
+    return updated,{"action":"WHITELIST","wallet":wallet,"state_path":"KYC_PENDING → WHITELISTED"}
+
+def token_nav_distribution_sync(total_capital: float, vault_current_nav: float, distributable_cash: float, class_pcts: dict[str,float] | None = None, senior_pref: float = 0.06, mezz_pref: float = 0.10) -> pd.DataFrame:
+    econ=token_class_economics(total_capital,vault_current_nav,class_pcts)
+    rows={r["class"]:r for r in econ.to_dict("records")}
+    cash=max(float(distributable_cash),0.0)
+    s_due=rows["HRV-S"]["issued_capital"]*max(float(senior_pref),0.0); m_due=rows["HRV-M"]["issued_capital"]*max(float(mezz_pref),0.0)
+    s_dist=min(cash,s_due); cash-=s_dist; m_dist=min(cash,m_due); cash-=m_dist; e_dist=max(cash,0.0)
+    dist={"HRV-S":s_dist,"HRV-M":m_dist,"HRV-E":e_dist}; out=[]
+    for cls in ["HRV-S","HRV-M","HRV-E"]:
+        row=rows[cls]; supply=row["token_supply"]; d=dist[cls]
+        out.append({"class":cls,"token_supply":supply,"class_nav":row["class_nav"],"nav_per_token":row["nav_per_token"],"distribution":d,"distribution_per_token":d/supply if supply else 0.0,"post_distribution_reference_value":row["nav_per_token"]+(d/supply if supply else 0.0),"sync_state":"NAV_SYNCED / DISTRIBUTION_CALCULATED"})
+    return pd.DataFrame(out)
