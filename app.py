@@ -16,6 +16,9 @@ from vault_engine import (
     VAULT_TERMS,
     ELIGIBILITY_RULES,
     INELIGIBLE_RULES,
+    WATERFALL_DEFAULTS,
+    waterfall_simulation,
+    waterfall_scenarios,
 )
 
 def money(x: float) -> str:
@@ -40,7 +43,7 @@ html,body,[class*="css"]{font-family:'DM Sans',sans-serif;color:#172033}
 </style>
 """,unsafe_allow_html=True)
 
-st.markdown("<div class='topbar'><div class='brand'>CARE<span>FI</span></div><div class='tag'>EVENT CAPACITY PROTOCOL · V0.3</div></div>",unsafe_allow_html=True)
+st.markdown("<div class='topbar'><div class='brand'>CARE<span>FI</span></div><div class='tag'>EVENT CAPACITY PROTOCOL · V0.4</div></div>",unsafe_allow_html=True)
 st.markdown("<div class='hero'><h1>"+CARE_HRV_01["name"]+"</h1><p>"+CARE_HRV_01["mandate"]+"</p></div>",unsafe_allow_html=True)
 
 metrics=portfolio_metrics(SAMPLE_PORTFOLIO,CARE_HRV_01["target_capital"])
@@ -51,7 +54,7 @@ m3.metric("Available capacity",money(metrics["available"]))
 m4.metric("Weighted event probability",f"{metrics['weighted_probability']:.1%}")
 m5.metric("Indicative portfolio yield",f"{metrics['indicative_yield']:.1%}")
 
-tabs=st.tabs(["Vault Overview","Mandate & Terms","Request Capacity","Portfolio Impact","Portfolio","Tokenized Interests","Oriel Reference Layer"])
+tabs=st.tabs(["Vault Overview","Mandate & Terms","Request Capacity","Portfolio Impact","Portfolio","Waterfall Simulator","Tokenized Interests","Oriel Reference Layer"])
 
 with tabs[0]:
     st.markdown("<div class='section'>Mandate & controls</div>",unsafe_allow_html=True)
@@ -202,6 +205,97 @@ with tabs[4]:
     st.dataframe(display,use_container_width=True,hide_index=True)
 
 with tabs[5]:
+    st.markdown("<div class='section'>Loss waterfall / investor-return simulator</div>",unsafe_allow_html=True)
+    st.markdown("<div class='callout'><b>Illustrative structure.</b> Portfolio principal losses are allocated first to HRV-E, then HRV-M, then HRV-S. Distributable income pays operating expenses first, then the Senior preference, then the Mezzanine preference, with residual income to Equity. These tranche sizes and preferred returns are modeling assumptions—not offering terms.</div>",unsafe_allow_html=True)
+
+    cfg1,cfg2=st.columns([1,1],gap="large")
+    with cfg1:
+        st.markdown("#### Capital structure")
+        equity_pct=st.slider("HRV-E · Equity / first-loss",5,50,int(WATERFALL_DEFAULTS["equity_pct"]*100),1)/100
+        mezz_pct=st.slider("HRV-M · Mezzanine",5,60,int(WATERFALL_DEFAULTS["mezz_pct"]*100),1)/100
+        senior_pct=1.0-equity_pct-mezz_pct
+        if senior_pct < 0.05:
+            st.error("Equity + Mezzanine leaves less than 5% for Senior. Reduce one of the junior tranches.")
+            senior_pct=max(senior_pct,0.0)
+        st.metric("HRV-S · Senior",f"{senior_pct:.0%}")
+        structure=pd.DataFrame([
+            ["HRV-E",equity_pct*CARE_HRV_01["target_capital"],equity_pct],
+            ["HRV-M",mezz_pct*CARE_HRV_01["target_capital"],mezz_pct],
+            ["HRV-S",senior_pct*CARE_HRV_01["target_capital"],senior_pct],
+        ],columns=["Class","Capital","% of vault"])
+        structure["Capital"]=structure["Capital"].map(money)
+        structure["% of vault"]=structure["% of vault"].map(lambda x:f"{x:.0%}")
+        st.dataframe(structure,use_container_width=True,hide_index=True)
+
+    with cfg2:
+        st.markdown("#### Income assumptions")
+        senior_pref=st.slider("HRV-S preferred return",0.0,15.0,WATERFALL_DEFAULTS["senior_pref"]*100,0.5)/100
+        mezz_pref=st.slider("HRV-M preferred return",0.0,25.0,WATERFALL_DEFAULTS["mezz_pref"]*100,0.5)/100
+        gross_income_rate=st.slider("Gross portfolio income before losses",0.0,30.0,WATERFALL_DEFAULTS["gross_income_rate"]*100,0.5)/100
+        expense_rate=st.slider("Operating expenses / fees",0.0,5.0,WATERFALL_DEFAULTS["expense_rate"]*100,0.25)/100
+
+    valid_structure=abs(equity_pct+mezz_pct+senior_pct-1.0)<1e-6 and senior_pct>=0.05
+    if valid_structure:
+        st.markdown("#### Mild / moderate / severe stress")
+        scenario_df=waterfall_scenarios(
+            CARE_HRV_01["target_capital"],equity_pct,mezz_pct,senior_pct,
+            senior_pref,mezz_pref,gross_income_rate,expense_rate
+        )
+        scenario_view=scenario_df[[
+            "scenario","tranche","portfolio_loss_pct","principal_loss_pct","cash_distribution","net_return"
+        ]].copy()
+        scenario_view["portfolio_loss_pct"]=scenario_view["portfolio_loss_pct"].map(lambda x:f"{x:.0%}")
+        scenario_view["principal_loss_pct"]=scenario_view["principal_loss_pct"].map(lambda x:f"{x:.1%}")
+        scenario_view["cash_distribution"]=scenario_view["cash_distribution"].map(money)
+        scenario_view["net_return"]=scenario_view["net_return"].map(lambda x:f"{x:+.1%}")
+        st.dataframe(scenario_view,use_container_width=True,hide_index=True)
+
+        fig=px.bar(
+            scenario_df,
+            x="scenario",
+            y="net_return",
+            color="tranche",
+            barmode="group",
+            labels={"net_return":"Investor net return","scenario":"Scenario","tranche":"Class"},
+        )
+        fig.update_yaxes(tickformat=".0%")
+        fig.update_layout(height=360,margin=dict(l=0,r=0,t=20,b=0),legend_title_text="")
+        st.plotly_chart(fig,use_container_width=True,config={"displayModeBar":False})
+
+        st.markdown("#### Inspect one scenario")
+        scenario_name=st.selectbox("Scenario",["Mild","Moderate","Severe","Custom"])
+        if scenario_name=="Custom":
+            selected_loss=st.slider("Custom portfolio principal loss",0,100,40,1)/100
+        else:
+            selected_loss=WATERFALL_DEFAULTS["scenarios"][scenario_name]
+
+        detail=waterfall_simulation(
+            CARE_HRV_01["target_capital"],selected_loss,equity_pct,mezz_pct,senior_pct,
+            senior_pref,mezz_pref,gross_income_rate,expense_rate
+        )
+        d1,d2,d3,d4=st.columns(4)
+        d1.metric("Portfolio loss",money(detail["portfolio_loss"]),f"{selected_loss:.0%} of capital")
+        d2.metric("Gross income",money(detail["gross_income"]))
+        d3.metric("Expenses",money(detail["expenses"]))
+        d4.metric("Net income to distribute",money(detail["net_income_before_waterfall"]))
+
+        detail_df=pd.DataFrame(detail["rows"])
+        detail_df=detail_df[[
+            "tranche","beginning_capital","principal_loss","ending_principal",
+            "cash_distribution","net_pnl","net_return"
+        ]]
+        for col in ["beginning_capital","principal_loss","ending_principal","cash_distribution","net_pnl"]:
+            detail_df[col]=detail_df[col].map(money)
+        detail_df["net_return"]=detail_df["net_return"].map(lambda x:f"{x:+.1%}")
+        detail_df.columns=["Class","Beginning capital","Principal loss","Ending principal","Cash distribution","Net P&L","Investor return"]
+        st.dataframe(detail_df,use_container_width=True,hide_index=True)
+
+        if detail["unallocated_loss"]>0:
+            st.error("Scenario losses exceed modeled vault capital by "+money(detail["unallocated_loss"])+".")
+
+        st.markdown("**Interpretation:** the same portfolio shock produces deliberately different investor outcomes. Equity absorbs first loss and receives residual upside; Mezzanine begins losing principal only after Equity is exhausted; Senior begins losing principal only after both junior layers are exhausted.")
+
+with tabs[6]:
     st.markdown("<div class='section'>Illustrative digital interests</div>",unsafe_allow_html=True)
     st.markdown("""
 The blockchain layer records vault ownership, subscriptions, NAV, deployed collateral, loss allocation and distributions. The prototype does **not** assume unrestricted secondary trading.
@@ -215,7 +309,7 @@ The blockchain layer records vault ownership, subscriptions, NAV, deployed colla
 A regulated CPO/SPV or equivalent institutional wrapper would remain the legal capital vehicle. The token is the programmable accounting and ownership layer—not a substitute for regulated execution, clearing or fund governance.
 """)
 
-with tabs[6]:
+with tabs[7]:
     st.markdown("<div class='section'>Oriel reference architecture</div>",unsafe_allow_html=True)
     st.markdown("""
 **Oriel Workbench → standardized contract payload → CARE-HRV-01 capacity engine → venue execution → vault portfolio.**
