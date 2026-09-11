@@ -47,15 +47,124 @@ from vault_engine import (
     burn_tokens,
     whitelist_wallet,
     token_nav_distribution_sync,
-    PROTOCOL_CAPITAL_POOLS,
-    PROTOCOL_LIFECYCLE,
-    TRANSACTION_STEPS,
-    route_capacity_request,
-    protocol_transaction_snapshot,
 )
 
 def money(x: float) -> str:
     return "$" + f"{x:,.0f}"
+
+
+PROTOCOL_CAPITAL_POOLS = [
+    {
+        "pool_id":"CARE-HRV-01","name":"Healthcare Event Risk Vault 2027",
+        "mandate":"Diversified institutional healthcare event risk",
+        "eligible_families":["Respiratory Utilization","Healthcare Inflation","Reimbursement","Pharmacy / Specialty"],
+        "geographies":["Texas","National","North Carolina"],"target_capital":10_000_000.0,
+        "available_capacity":2_100_000.0,"single_event_limit":0.125,
+        "minimum_basis_grade":"B+","medusdi_policy":"Permitted","price_adjustment":0.000,
+    },
+    {
+        "pool_id":"CARE-RESP-01","name":"Respiratory Utilization Sidecar",
+        "mandate":"Seasonal respiratory and utilization event risk",
+        "eligible_families":["Respiratory Utilization"],
+        "geographies":["Texas","National","North Carolina"],"target_capital":5_000_000.0,
+        "available_capacity":1_250_000.0,"single_event_limit":0.20,
+        "minimum_basis_grade":"B","medusdi_policy":"Limited","price_adjustment":-0.015,
+    },
+    {
+        "pool_id":"CARE-INF-01","name":"Healthcare Inflation Capacity Pool",
+        "mandate":"Healthcare inflation, reimbursement and medical-cost factor risk",
+        "eligible_families":["Healthcare Inflation","Reimbursement"],
+        "geographies":["National"],"target_capital":6_000_000.0,
+        "available_capacity":1_800_000.0,"single_event_limit":0.18,
+        "minimum_basis_grade":"A-","medusdi_policy":"Required","price_adjustment":-0.010,
+    },
+]
+
+PROTOCOL_LIFECYCLE = [
+    ("Submitted","Originator"),("Validated","Oriel"),("Routed","CareFi Protocol"),
+    ("Quoted","Capital Pools"),("Allocated","CareFi Protocol"),("Hedged","MEDUSDi Layer"),
+    ("Executed","Venue"),("Collateralized","Vault / Clearer"),("Observing","Public Print"),
+    ("Resolved","Oriel / Venue"),("Settled","Venue / Administrator"),("Distributed","Token / Investor Ledger"),
+]
+
+TRANSACTION_STEPS = [
+    "Risk enters","Oriel validates","Capacity assembles","MEDUSDi hedge attaches",
+    "Venue execution","Capital stack updates","Settlement & distribution",
+]
+
+_PROTOCOL_BASIS_RANK={"A":6,"A-":5,"B+":4,"B":3,"B-":2,"C+":1}
+_PROTOCOL_BASIS_CHARGE={"A":0.005,"A-":0.008,"B+":0.015,"B":0.020,"B-":0.027,"C+":0.035}
+
+def _protocol_pool_quote(pool,payload):
+    family=str(payload["risk_family"])
+    geography=str(payload["geography"])
+    grade=str(payload["basis_grade"])
+    if family not in pool["eligible_families"]:
+        return {"pool_id":pool["pool_id"],"pool_name":pool["name"],"decision":"INELIGIBLE","reason":"Risk family outside mandate","eligible_capacity":0.0,"minimum_price":None,"medusdi_hedge":0.0}
+    if geography not in pool["geographies"]:
+        return {"pool_id":pool["pool_id"],"pool_name":pool["name"],"decision":"INELIGIBLE","reason":"Geography outside mandate","eligible_capacity":0.0,"minimum_price":None,"medusdi_hedge":0.0}
+    if _PROTOCOL_BASIS_RANK.get(grade,0) < _PROTOCOL_BASIS_RANK.get(pool["minimum_basis_grade"],0):
+        return {"pool_id":pool["pool_id"],"pool_name":pool["name"],"decision":"INELIGIBLE","reason":"Basis grade below pool minimum","eligible_capacity":0.0,"minimum_price":None,"medusdi_hedge":0.0}
+
+    p=float(payload["model_probability"])
+    duration=min(0.004*int(payload["tenor_months"]),0.050)
+    minimum_price=min(max(p+0.020+duration+_PROTOCOL_BASIS_CHARGE.get(grade,0.020)+float(pool["price_adjustment"]),0.01),0.95)
+    capital_fraction=1.0-minimum_price
+    event_limit=float(pool["target_capital"])*float(pool["single_event_limit"])
+    capacity_by_limit=event_limit/capital_fraction if capital_fraction>0 else 0.0
+    eligible_capacity=min(float(payload["requested_notional"]),float(pool["available_capacity"]),capacity_by_limit)
+    hedge_ratio={"Required":0.75,"Permitted":0.50,"Limited":0.25}.get(pool["medusdi_policy"],0.0)
+    hedge=medusdi_request_hedge(eligible_capacity,family,hedge_ratio)["medusdi_hedge_notional"]
+    return {
+        "pool_id":pool["pool_id"],"pool_name":pool["name"],
+        "decision":"APPROVED" if eligible_capacity>=float(payload["requested_notional"])-1 else "PARTIAL",
+        "reason":"Eligible","eligible_capacity":eligible_capacity,"minimum_price":minimum_price,
+        "medusdi_hedge":hedge,
+    }
+
+def route_capacity_request(payload):
+    quotes=[_protocol_pool_quote(pool,payload) for pool in PROTOCOL_CAPITAL_POOLS]
+    executable=sorted(
+        [q for q in quotes if q["eligible_capacity"]>0 and q["minimum_price"] is not None],
+        key=lambda q:(q["minimum_price"],-q["eligible_capacity"])
+    )
+    remaining=float(payload["requested_notional"])
+    allocations=[]
+    weighted_price=0.0
+    total_hedge=0.0
+    for quote in executable:
+        if remaining<=0:
+            break
+        allocation=min(remaining,float(quote["eligible_capacity"]))
+        hedge_share=allocation/quote["eligible_capacity"] if quote["eligible_capacity"] else 0.0
+        allocated_hedge=float(quote["medusdi_hedge"])*hedge_share
+        allocations.append({**quote,"allocated_notional":allocation,"allocated_medusdi_hedge":allocated_hedge})
+        weighted_price+=allocation*float(quote["minimum_price"])
+        total_hedge+=allocated_hedge
+        remaining-=allocation
+    assembled=float(payload["requested_notional"])-max(remaining,0.0)
+    return {
+        "quotes":quotes,"allocations":allocations,"requested_notional":float(payload["requested_notional"]),
+        "assembled_capacity":assembled,"unfilled":max(remaining,0.0),
+        "blended_price":weighted_price/assembled if assembled else 0.0,
+        "blended_medusdi_hedge":total_hedge,
+        "fill_ratio":assembled/float(payload["requested_notional"]) if float(payload["requested_notional"]) else 0.0,
+    }
+
+def protocol_transaction_snapshot(payload):
+    routed=route_capacity_request(payload)
+    beta=medusdi_request_hedge(routed["assembled_capacity"],str(payload["risk_family"]),0.50)
+    base_nav=vault_nav(SAMPLE_PORTFOLIO,CARE_HRV_01["target_capital"],MEDUSDI_DEFAULTS["portfolio_hedge_ratio"])
+    risk=correlated_loss_analytics(
+        SAMPLE_PORTFOLIO,CARE_HRV_01["target_capital"],
+        WATERFALL_DEFAULTS["equity_pct"],WATERFALL_DEFAULTS["mezz_pct"],WATERFALL_DEFAULTS["senior_pct"],
+        expense_rate=WATERFALL_DEFAULTS["expense_rate"],correlation_scale=1.0,simulations=10000
+    )
+    return {
+        "payload":dict(payload),"routed":routed,"beta":beta,"vault_nav":base_nav["nav"],
+        "posted_collateral":base_nav["posted_collateral"],
+        "expected_loss":risk["expected_principal_loss"],"var95_loss":risk["var95_loss"],
+    }
 
 st.set_page_config(page_title="CareFi · Event Capacity Protocol",page_icon="CF",layout="wide",initial_sidebar_state="collapsed")
 
