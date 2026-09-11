@@ -192,6 +192,14 @@ html,body,[class*="css"]{font-family:'DM Sans',sans-serif;color:#172033}
 .proto-pool.active{background:#e6f4ef;color:#216b55}
 .proto-sidecar{background:#fff7e9;border:1px solid #e8c982;border-radius:12px;padding:1rem;min-height:112px}
 .proto-connector{text-align:center;font-size:1.35rem;color:#8190a3;line-height:1;margin:.2rem 0}
+.alloc-strip{display:flex;width:100%;height:34px;border-radius:9px;overflow:hidden;background:#e8e8e8;margin:.35rem 0 .75rem;border:1px solid #ddd8cf}
+.alloc-seg{display:flex;align-items:center;justify-content:center;font-size:.68rem;font-weight:800;white-space:nowrap;overflow:hidden}
+.alloc-seg-1{background:#dcefe8;color:#1e6551}.alloc-seg-2{background:#e7e3f4;color:#514380}.alloc-seg-3{background:#f7ead0;color:#7d5a16}.alloc-seg-4{background:#dfe9f4;color:#35577a}
+.alloc-ticket{background:#fff;border:1px solid #d9d5cc;border-radius:12px;padding:.9rem 1rem;margin:.45rem 0;display:grid;grid-template-columns:minmax(180px,1.1fr) 2.4fr;column-gap:1.2rem;row-gap:.5rem;align-items:center}
+.alloc-title{font-size:1rem;font-weight:800;color:#172033}.alloc-sub{font-size:.72rem;color:#697386;margin-top:.12rem}
+.alloc-metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:.65rem}
+.alloc-metrics span{display:flex;flex-direction:column}.alloc-metrics b{font-family:'DM Mono',monospace;font-size:.88rem;color:#172033}.alloc-metrics small{font-size:.62rem;color:#7a8494;margin-top:.12rem}
+.alloc-why{grid-column:1/-1;border-top:1px solid #eeeae2;padding-top:.48rem;font-size:.72rem;color:#596273}
 </style>
 """,unsafe_allow_html=True)
 
@@ -256,22 +264,45 @@ with tabs[0]:
     st.dataframe(quotes_df,use_container_width=True,hide_index=True)
 
     st.markdown("#### Capacity assembly")
+    ca1,ca2,ca3,ca4=st.columns(4)
+    ca1.metric("Requested",money(routed["requested_notional"]))
+    ca2.metric("Filled",money(routed["assembled_capacity"]),f"{routed['fill_ratio']:.0%}")
+    ca3.metric("Unfilled",money(routed["unfilled"]))
+    ca4.metric("Blended minimum",f"{routed['blended_price']:.1%}" if routed["assembled_capacity"] else "—")
+
     if routed["allocations"]:
-        alloc_df=pd.DataFrame([
-            {
-                "Pool":a["pool_id"],
-                "Allocated notional":a["allocated_notional"],
-                "Minimum price":a["minimum_price"],
-                "MEDUSDi hedge":a["allocated_medusdi_hedge"],
-            } for a in routed["allocations"]
-        ])
-        fig_alloc=px.bar(
-            alloc_df,x="Pool",y="Allocated notional",
-            text=alloc_df["Allocated notional"].map(money),
-            labels={"Allocated notional":"Allocated capacity"}
-        )
-        fig_alloc.update_layout(height=320,margin=dict(l=0,r=0,t=20,b=0))
-        st.plotly_chart(fig_alloc,use_container_width=True,config={"displayModeBar":False})
+        if len(routed["allocations"])>1:
+            segments=[]
+            for i,a in enumerate(routed["allocations"]):
+                share=(a["allocated_notional"]/routed["assembled_capacity"]*100) if routed["assembled_capacity"] else 0.0
+                segments.append("<div class='alloc-seg alloc-seg-"+str((i%4)+1)+"' style='width:"+f"{share:.3f}"+"%' title='"+a["pool_id"]+" · "+money(a["allocated_notional"])+"'><span>"+a["pool_id"]+" · "+f"{share:.0f}"+"%</span></div>")
+            st.markdown("<div class='alloc-strip'>"+"".join(segments)+"</div>",unsafe_allow_html=True)
+
+        for idx,a in enumerate(routed["allocations"]):
+            pool=next((p for p in PROTOCOL_CAPITAL_POOLS if p["pool_id"]==a["pool_id"]),None)
+            remaining=max(float(pool["available_capacity"])-float(a["allocated_notional"]),0.0) if pool else 0.0
+            rationale=[]
+            if idx==0:
+                rationale.append("lowest qualifying price")
+            rationale.append(str(protocol_payload["risk_family"]).lower()+" mandate")
+            rationale.append(str(protocol_payload["geography"])+" eligible")
+            rationale.append(str(protocol_payload["basis_grade"])+" accepted")
+            st.markdown(
+                "<div class='alloc-ticket'>"
+                "<div><div class='proto-kicker'>ALLOCATED CAPITAL</div><div class='alloc-title'>"+a["pool_id"]+"</div>"
+                "<div class='alloc-sub'>"+(a["pool_name"] if a.get("pool_name") else "")+"</div></div>"
+                "<div class='alloc-metrics'>"
+                "<span><b>"+money(a["allocated_notional"])+"</b><small>allocated</small></span>"
+                "<span><b>"+f"{a['minimum_price']:.1%}"+"</b><small>minimum price</small></span>"
+                "<span><b>"+money(a["allocated_medusdi_hedge"])+"</b><small>MEDUSDi hedge</small></span>"
+                "<span><b>"+money(remaining)+"</b><small>remaining pool capacity</small></span>"
+                "</div>"
+                "<div class='alloc-why'><b>Routing rationale:</b> "+" · ".join(rationale)+"</div>"
+                "</div>",
+                unsafe_allow_html=True
+            )
+    else:
+        st.warning("No eligible capital pool can currently fill this request.")
 
     st.markdown("#### Protocol flow")
     st.caption("Architecture view — the allocation table above carries the economics; this map shows who does what.")
