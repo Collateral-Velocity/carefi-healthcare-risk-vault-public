@@ -23,6 +23,11 @@ from vault_engine import (
     event_portfolio_scenario,
     waterfall_from_event_scenario,
     event_waterfall_scenarios,
+    MEDUSDI_DEFAULTS,
+    RISK_FAMILY_HEALTHCARE_BETA,
+    portfolio_healthcare_beta,
+    medusdi_request_hedge,
+    medusdi_hedge_pnl,
 )
 
 def money(x: float) -> str:
@@ -47,7 +52,7 @@ html,body,[class*="css"]{font-family:'DM Sans',sans-serif;color:#172033}
 </style>
 """,unsafe_allow_html=True)
 
-st.markdown("<div class='topbar'><div class='brand'>CARE<span>FI</span></div><div class='tag'>EVENT CAPACITY PROTOCOL · V0.5</div></div>",unsafe_allow_html=True)
+st.markdown("<div class='topbar'><div class='brand'>CARE<span>FI</span></div><div class='tag'>HEALTHCARE EVENT RISK VAULT · V0.6</div></div>",unsafe_allow_html=True)
 st.markdown("<div class='hero'><h1>"+CARE_HRV_01["name"]+"</h1><p>"+CARE_HRV_01["mandate"]+"</p></div>",unsafe_allow_html=True)
 
 metrics=portfolio_metrics(SAMPLE_PORTFOLIO,CARE_HRV_01["target_capital"])
@@ -156,10 +161,18 @@ with tabs[2]:
         grades=["A","A-","B+","B","B-","C+"]
         grade_index=grades.index(p["basis_grade"]) if p["basis_grade"] in grades else 2
         basis_grade=st.selectbox("Basis-risk grade",grades,index=grade_index)
+        st.markdown("#### MEDUSDi hedge layer")
+        medusdi_enabled=st.toggle("Hedge common healthcare-inflation factor with MEDUSDi",value=True)
+        default_beta=RISK_FAMILY_HEALTHCARE_BETA.get(risk_family,0.25)
+        healthcare_beta=st.slider("Illustrative healthcare-inflation beta",0,100,int(default_beta*100),5)/100
+        request_hedge_ratio=st.slider("MEDUSDi hedge ratio",0,100,int(MEDUSDI_DEFAULTS["request_hedge_ratio"]*100),5,disabled=not medusdi_enabled)/100
 
     quote=capacity_quote(SAMPLE_PORTFOLIO,CARE_HRV_01,requested,market_probability,risk_family,geography,tenor_months,basis_grade)
     active_payload={**p,"title":title,"risk_family":risk_family,"geography":geography,"public_print":public_print,"requested_notional":requested,"model_probability":market_probability,"tenor_months":tenor_months,"basis_grade":basis_grade}
     impact=portfolio_impact(SAMPLE_PORTFOLIO,CARE_HRV_01,active_payload,quote)
+    medusdi_request=medusdi_request_hedge(
+        quote["eligible_capacity"],risk_family,request_hedge_ratio if medusdi_enabled else 0.0,healthcare_beta
+    )
     st.session_state.last_quote=quote
     st.session_state.last_payload=active_payload
     st.session_state.last_impact=impact
@@ -185,6 +198,12 @@ with tabs[2]:
         ],columns=["Component","Price contribution"])
         bridge["Price contribution"]=bridge["Price contribution"].map(lambda x:f"{x:.1%}")
         st.dataframe(bridge,use_container_width=True,hide_index=True)
+        st.markdown("<div class='section'>MEDUSDi hedge overlay</div>",unsafe_allow_html=True)
+        h1,h2,h3=st.columns(3)
+        h1.metric("Gross healthcare-beta exposure",money(medusdi_request["gross_beta_exposure"]))
+        h2.metric("Suggested MEDUSDi hedge",money(medusdi_request["medusdi_hedge_notional"]))
+        h3.metric("Net healthcare-beta exposure",money(medusdi_request["net_beta_exposure"]))
+        st.caption("Illustrative factor hedge only. The prototype does not yet give hard collateral or concentration-limit credit for MEDUSDi; it shows how the common healthcare-inflation component could be offset alongside the event position.")
 
 with tabs[3]:
     quote=st.session_state.get("last_quote",capacity_quote(SAMPLE_PORTFOLIO,CARE_HRV_01,ORIEL_TEXAS_RESPIRATORY["requested_notional"],ORIEL_TEXAS_RESPIRATORY["model_probability"],ORIEL_TEXAS_RESPIRATORY["risk_family"],ORIEL_TEXAS_RESPIRATORY["geography"],ORIEL_TEXAS_RESPIRATORY["tenor_months"],ORIEL_TEXAS_RESPIRATORY["basis_grade"]))
@@ -200,6 +219,21 @@ with tabs[3]:
     st.markdown("<div class='dark'><b>Capital allocation logic:</b> CARE-HRV-01 does not simply accept every positive-edge event. Capacity is capped by single-event, risk-family, geography and total available-capital constraints. The same Oriel contract can therefore clear at different capacity levels as the vault portfolio changes.</div>",unsafe_allow_html=True)
 
 with tabs[4]:
+    st.markdown("<div class='section'>MEDUSDi healthcare-beta dashboard</div>",unsafe_allow_html=True)
+    portfolio_hedge_ratio=st.slider("Portfolio MEDUSDi hedge ratio",0,100,int(MEDUSDI_DEFAULTS["portfolio_hedge_ratio"]*100),5,key="portfolio_medusdi_ratio")/100
+    beta_view=portfolio_healthcare_beta(SAMPLE_PORTFOLIO,portfolio_hedge_ratio)
+    b1,b2,b3=st.columns(3)
+    b1.metric("Gross healthcare-beta exposure",money(beta_view["gross_beta_exposure"]))
+    b2.metric("MEDUSDi hedge",money(beta_view["medusdi_hedge_notional"]))
+    b3.metric("Net healthcare-beta exposure",money(beta_view["net_beta_exposure"]))
+    beta_detail=pd.DataFrame(beta_view["detail"])
+    beta_detail["notional"]=beta_detail["notional"].map(money)
+    beta_detail["healthcare_beta"]=beta_detail["healthcare_beta"].map(lambda x:f"{x:.0%}")
+    beta_detail["gross_beta_exposure"]=beta_detail["gross_beta_exposure"].map(money)
+    beta_detail.columns=["Position","Risk family","Notional","Illustrative healthcare beta","Gross beta exposure"]
+    st.dataframe(beta_detail,use_container_width=True,hide_index=True)
+    st.caption("Healthcare betas are illustrative prototype assumptions, not empirically calibrated hedge ratios.")
+
     st.markdown("<div class='section'>Current modeled portfolio</div>",unsafe_allow_html=True)
     display=SAMPLE_PORTFOLIO.copy()
     display["notional"]=display["notional"].map(money)
@@ -285,9 +319,24 @@ with tabs[5]:
             st.write("**Triggered:** "+("; ".join(triggered) if triggered else "None"))
 
         event_result=event_portfolio_scenario(SAMPLE_PORTFOLIO,triggered)
+        portfolio_beta=portfolio_healthcare_beta(SAMPLE_PORTFOLIO,MEDUSDI_DEFAULTS["portfolio_hedge_ratio"])
+        medusdi_return_default=MEDUSDI_DEFAULTS["scenario_returns"].get(scenario_name,0.08)
+        st.markdown("#### MEDUSDi scenario hedge")
+        w1,w2=st.columns(2)
+        with w1:
+            wf_hedge_ratio=st.slider("MEDUSDi hedge ratio for waterfall",0,100,int(MEDUSDI_DEFAULTS["portfolio_hedge_ratio"]*100),5,key="waterfall_medusdi_ratio")/100
+        with w2:
+            medusdi_return=st.slider("MEDUSDi return in selected scenario",-20,30,int(medusdi_return_default*100),1)/100
+        hedge_base=portfolio_healthcare_beta(SAMPLE_PORTFOLIO,wf_hedge_ratio)
+        hedge_pnl=medusdi_hedge_pnl(hedge_base["medusdi_hedge_notional"],medusdi_return)
+
         wf=waterfall_from_event_scenario(
             CARE_HRV_01["target_capital"],event_result,equity_pct,mezz_pct,senior_pct,
-            senior_pref,mezz_pref,expense_rate
+            senior_pref,mezz_pref,expense_rate,hedge_pnl=0.0
+        )
+        wf_hedged=waterfall_from_event_scenario(
+            CARE_HRV_01["target_capital"],event_result,equity_pct,mezz_pct,senior_pct,
+            senior_pref,mezz_pref,expense_rate,hedge_pnl=hedge_pnl
         )
 
         k1,k2,k3,k4=st.columns(4)
@@ -295,6 +344,10 @@ with tabs[5]:
         k2.metric("Non-trigger gains",money(event_result["gross_nontrigger_gains"]))
         k3.metric("Net portfolio P&L",money(event_result["net_pnl"]))
         k4.metric("Vault principal loss",f"{wf['principal_loss_pct']:.1%}",money(wf["principal_loss"]))
+        h1,h2,h3=st.columns(3)
+        h1.metric("MEDUSDi hedge notional",money(hedge_base["medusdi_hedge_notional"]))
+        h2.metric("Scenario MEDUSDi return",f"{medusdi_return:+.1%}")
+        h3.metric("MEDUSDi hedge P&L",money(hedge_pnl))
 
         outcome=pd.DataFrame(event_result["rows"])
         outcome["Outcome"]=outcome["triggered"].map({True:"TRIGGERED",False:"No trigger"})
@@ -307,6 +360,37 @@ with tabs[5]:
         st.dataframe(outcome,use_container_width=True,hide_index=True)
 
         st.markdown("#### Investor waterfall")
+        compare=[]
+        base_rows={row["tranche"]:row for row in wf["rows"]}
+        hedged_rows={row["tranche"]:row for row in wf_hedged["rows"]}
+        for tranche in ["HRV-E","HRV-M","HRV-S"]:
+            base=base_rows[tranche]
+            hedged=hedged_rows[tranche]
+            compare.append({
+                "Class":tranche,
+                "Unhedged principal loss":base["principal_loss"],
+                "Hedged principal loss":hedged["principal_loss"],
+                "Unhedged investor return":base["net_return"],
+                "MEDUSDi-hedged return":hedged["net_return"],
+                "Return improvement":hedged["net_return"]-base["net_return"],
+            })
+        compare_df=pd.DataFrame(compare)
+        for col in ["Unhedged principal loss","Hedged principal loss"]:
+            compare_df[col]=compare_df[col].map(money)
+        for col in ["Unhedged investor return","MEDUSDi-hedged return","Return improvement"]:
+            compare_df[col]=compare_df[col].map(lambda x:f"{x:+.1%}")
+        st.dataframe(compare_df,use_container_width=True,hide_index=True)
+
+        chart_rows=[]
+        for tranche in ["HRV-E","HRV-M","HRV-S"]:
+            chart_rows.append({"Class":tranche,"Structure":"Unhedged","Investor return":base_rows[tranche]["net_return"]})
+            chart_rows.append({"Class":tranche,"Structure":"MEDUSDi hedged","Investor return":hedged_rows[tranche]["net_return"]})
+        compare_chart=px.bar(pd.DataFrame(chart_rows),x="Class",y="Investor return",color="Structure",barmode="group")
+        compare_chart.update_yaxes(tickformat=".0%")
+        compare_chart.update_layout(height=340,margin=dict(l=0,r=0,t=20,b=0),legend_title_text="")
+        st.plotly_chart(compare_chart,use_container_width=True,config={"displayModeBar":False})
+
+        st.markdown("#### Unhedged waterfall detail")
         detail_df=pd.DataFrame(wf["rows"])
         detail_df=detail_df[[
             "tranche","beginning_capital","principal_loss","ending_principal",
@@ -318,7 +402,7 @@ with tabs[5]:
         detail_df.columns=["Class","Beginning capital","Principal loss","Ending principal","Cash distribution","Net P&L","Investor return"]
         st.dataframe(detail_df,use_container_width=True,hide_index=True)
 
-        st.markdown("<div class='dark'><b>What the severe case now means:</b> Severe is not an arbitrary 60% loss. It assumes all six modeled healthcare events trigger. With the current $10M vault and modeled positions, maximum triggered-event loss is limited to the capital actually at risk in those six positions. That may impair Equity and Mezzanine without reaching Senior—which is precisely the diversification/capital-stack result the prototype should reveal rather than assume.</div>",unsafe_allow_html=True)
+        st.markdown("<div class='dark'><b>MEDUSDi interpretation:</b> the hedge is modeled as a long healthcare-inflation factor overlay. When MEDUSDi rises in an adverse healthcare-cost scenario, its gain offsets part of the event-book loss before the HRV-E → HRV-M → HRV-S waterfall is applied. This demonstrates the architecture; the beta and scenario-return assumptions still require empirical calibration.<br><br><b>What the severe case now means:</b> Severe is not an arbitrary 60% loss. It assumes all six modeled healthcare events trigger. With the current $10M vault and modeled positions, maximum triggered-event loss is limited to the capital actually at risk in those six positions. That may impair Equity and Mezzanine without reaching Senior—which is precisely the diversification/capital-stack result the prototype should reveal rather than assume.</div>",unsafe_allow_html=True)
 
         with st.expander("Secondary arbitrary stress override"):
             custom_loss=st.slider("Hypothetical vault principal loss",0,100,40,1,key="secondary_custom_loss")/100
