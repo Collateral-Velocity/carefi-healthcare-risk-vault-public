@@ -119,8 +119,7 @@ with tabs[1]:
         for i,item in enumerate(VAULT_TERMS["valuation_hierarchy"],1):
             st.markdown(f"**{i}.** {item}")
         st.markdown("#### Loss waterfall")
-        st.markdown(" → ".join(VAULT_TERMS["loss_waterfall"])+"  
-*First-loss to last-loss*")
+        st.markdown(" → ".join(VAULT_TERMS["loss_waterfall"]) + "  \\n*First-loss to last-loss*")
         st.markdown("#### Distribution waterfall")
         for i,item in enumerate(VAULT_TERMS["distribution_waterfall"],1):
             st.markdown(f"**{i}.** {item}")
