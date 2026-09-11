@@ -2,6 +2,8 @@ from __future__ import annotations
 import copy
 import json
 import pandas as pd
+import numpy as np
+from statistics import NormalDist
 
 CARE_HRV_01 = {
     "name": "CARE-HRV-01 · Healthcare Event Risk Vault 2027",
@@ -716,4 +718,139 @@ def expected_loss_analytics(
         "tranches":tranche_stats,
         "state_count":len(states),
         "assumption":"Independent Bernoulli events using current modeled probabilities; no correlation adjustment.",
+    }
+
+
+CORRELATION_BASE = np.array([
+    [1.00, 0.75, 0.15, 0.15, 0.10, 0.10],
+    [0.75, 1.00, 0.15, 0.15, 0.10, 0.10],
+    [0.15, 0.15, 1.00, 0.70, 0.35, 0.30],
+    [0.15, 0.15, 0.70, 1.00, 0.40, 0.40],
+    [0.10, 0.10, 0.35, 0.40, 1.00, 0.30],
+    [0.10, 0.10, 0.30, 0.40, 0.30, 1.00],
+], dtype=float)
+
+def _nearest_correlation(matrix: np.ndarray) -> np.ndarray:
+    """Project a symmetric matrix to a stable positive-semidefinite correlation matrix."""
+    a=(matrix+matrix.T)/2.0
+    vals,vecs=np.linalg.eigh(a)
+    vals=np.clip(vals,1e-6,None)
+    psd=vecs @ np.diag(vals) @ vecs.T
+    d=np.sqrt(np.clip(np.diag(psd),1e-12,None))
+    corr=psd/np.outer(d,d)
+    np.fill_diagonal(corr,1.0)
+    return np.clip(corr,-0.95,1.0)
+
+def joint_loss_correlation_matrix(scale: float = 1.0) -> np.ndarray:
+    """Latent Gaussian-factor correlation matrix. Scale changes off-diagonal dependence."""
+    s=max(float(scale),0.0)
+    m=CORRELATION_BASE.copy()
+    for i in range(m.shape[0]):
+        for j in range(m.shape[1]):
+            if i != j:
+                m[i,j]=np.clip(m[i,j]*s,-0.95,0.95)
+    np.fill_diagonal(m,1.0)
+    return _nearest_correlation(m)
+
+def correlation_matrix_frame(portfolio: pd.DataFrame, scale: float = 1.0) -> pd.DataFrame:
+    corr=joint_loss_correlation_matrix(scale)
+    labels=[
+        "TX Respiratory",
+        "National Flu",
+        "HC Services PPI",
+        "Medical CPI",
+        "Medicare Reimb.",
+        "Specialty Drug",
+    ]
+    if len(portfolio) != len(labels):
+        labels=[str(x)[:18] for x in portfolio["position"]]
+    return pd.DataFrame(corr,index=labels,columns=labels)
+
+def correlated_loss_analytics(
+    portfolio: pd.DataFrame,
+    total_capital: float,
+    equity_pct: float = 0.20,
+    mezz_pct: float = 0.30,
+    senior_pct: float = 0.50,
+    expense_rate: float = 0.01,
+    correlation_scale: float = 1.0,
+    simulations: int = 30000,
+    seed: int = 202709,
+) -> dict:
+    """Gaussian-copula joint trigger simulation preserving each modeled marginal probability."""
+    weights=[float(equity_pct),float(mezz_pct),float(senior_pct)]
+    if any(x < 0 for x in weights) or abs(sum(weights)-1.0) > 1e-6:
+        raise ValueError("Tranche percentages must sum to 100%.")
+    n=len(portfolio)
+    corr=joint_loss_correlation_matrix(correlation_scale)
+    if corr.shape != (n,n):
+        raise ValueError("Correlation matrix dimension does not match portfolio.")
+
+    probabilities=np.asarray(portfolio["model_probability"],dtype=float)
+    thresholds=np.array([NormalDist().inv_cdf(float(np.clip(p,1e-6,1-1e-6))) for p in probabilities])
+    rng=np.random.default_rng(int(seed))
+    z=rng.multivariate_normal(np.zeros(n),corr,size=int(simulations))
+    hits=z <= thresholds
+    gains=np.asarray(portfolio["price"],dtype=float)*np.asarray(portfolio["notional"],dtype=float)
+    hit_losses=-np.asarray(portfolio["capital_at_risk"],dtype=float)
+    pnl_matrix=np.where(hits,hit_losses,gains)
+    portfolio_pnl=pnl_matrix.sum(axis=1)
+
+    total=float(total_capital)
+    expenses=total*max(float(expense_rate),0.0)
+    net_after_expenses=portfolio_pnl-expenses
+    principal_loss=np.maximum(-net_after_expenses,0.0)
+
+    e_cap=total*equity_pct
+    m_cap=total*mezz_pct
+    s_cap=total*senior_pct
+    e_loss=np.minimum(principal_loss,e_cap)
+    rem=np.maximum(principal_loss-e_loss,0.0)
+    m_loss=np.minimum(rem,m_cap)
+    rem=np.maximum(rem-m_loss,0.0)
+    s_loss=np.minimum(rem,s_cap)
+
+    tranche_losses={"HRV-E":e_loss,"HRV-M":m_loss,"HRV-S":s_loss}
+    tranche_caps={"HRV-E":e_cap,"HRV-M":m_cap,"HRV-S":s_cap}
+    tranche_stats={}
+    for t,losses in tranche_losses.items():
+        cap=tranche_caps[t]
+        tranche_stats[t]={
+            "expected_loss":float(losses.mean()),
+            "expected_loss_pct":float(losses.mean()/cap) if cap else 0.0,
+            "impairment_probability":float(np.mean(losses>1e-9)),
+            "wipeout_probability":float(np.mean(losses>=cap-1e-9)) if cap else 0.0,
+        }
+
+    var95=float(np.quantile(principal_loss,0.95))
+    var99=float(np.quantile(principal_loss,0.99))
+    tail95=principal_loss[principal_loss>=var95-1e-9]
+    tail99=principal_loss[principal_loss>=var99-1e-9]
+    trigger_count=hits.sum(axis=1)
+
+    empirical_trigger_corr=np.corrcoef(hits.astype(float),rowvar=False)
+    empirical_trigger_corr=np.nan_to_num(empirical_trigger_corr,nan=0.0)
+    np.fill_diagonal(empirical_trigger_corr,1.0)
+
+    return {
+        "expected_portfolio_pnl":float(portfolio_pnl.mean()),
+        "expected_principal_loss":float(principal_loss.mean()),
+        "expected_principal_loss_pct":float(principal_loss.mean()/total) if total else 0.0,
+        "var95_loss":var95,
+        "var99_loss":var99,
+        "var95_pct":var95/total if total else 0.0,
+        "var99_pct":var99/total if total else 0.0,
+        "expected_shortfall95":float(tail95.mean()) if len(tail95) else 0.0,
+        "expected_shortfall99":float(tail99.mean()) if len(tail99) else 0.0,
+        "tranches":tranche_stats,
+        "simulations":int(simulations),
+        "correlation_scale":float(correlation_scale),
+        "latent_correlation":corr,
+        "empirical_trigger_correlation":empirical_trigger_corr,
+        "prob_2plus_triggers":float(np.mean(trigger_count>=2)),
+        "prob_3plus_triggers":float(np.mean(trigger_count>=3)),
+        "prob_4plus_triggers":float(np.mean(trigger_count>=4)),
+        "prob_all_triggers":float(np.mean(trigger_count==n)),
+        "expected_trigger_count":float(trigger_count.mean()),
+        "assumption":"Gaussian-copula joint-trigger model preserving modeled marginal event probabilities; correlation inputs are prototype assumptions, not yet empirically calibrated.",
     }
