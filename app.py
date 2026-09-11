@@ -36,6 +36,15 @@ from vault_engine import (
     expected_loss_analytics,
     correlation_matrix_frame,
     correlated_loss_analytics,
+    TOKEN_CLASS_TERMS,
+    TOKEN_LIFECYCLE,
+    DEFAULT_INVESTOR_REGISTRY,
+    token_class_economics,
+    registry_summary,
+    mint_tokens,
+    burn_tokens,
+    whitelist_wallet,
+    token_nav_distribution_sync,
 )
 
 def money(x: float) -> str:
@@ -60,7 +69,7 @@ html,body,[class*="css"]{font-family:'DM Sans',sans-serif;color:#172033}
 </style>
 """,unsafe_allow_html=True)
 
-st.markdown("<div class='topbar'><div class='brand'>CARE<span>FI</span></div><div class='tag'>HEALTHCARE EVENT RISK VAULT · V0.8</div></div>",unsafe_allow_html=True)
+st.markdown("<div class='topbar'><div class='brand'>CARE<span>FI</span></div><div class='tag'>HEALTHCARE EVENT RISK VAULT · V0.9</div></div>",unsafe_allow_html=True)
 st.markdown("<div class='hero'><h1>"+CARE_HRV_01["name"]+"</h1><p>"+CARE_HRV_01["mandate"]+"</p></div>",unsafe_allow_html=True)
 
 metrics=portfolio_metrics(SAMPLE_PORTFOLIO,CARE_HRV_01["target_capital"])
@@ -568,18 +577,135 @@ with tabs[8]:
             st.caption("This override is retained only for capital-structure stress testing beyond the current six-position portfolio.")
 
 with tabs[9]:
-    st.markdown("<div class='section'>Illustrative digital interests</div>",unsafe_allow_html=True)
-    st.markdown("""
-The blockchain layer records vault ownership, subscriptions, NAV, deployed collateral, loss allocation and distributions. The prototype does **not** assume unrestricted secondary trading.
+    st.markdown("<div class='section'>Tokenization / Investor Registry</div>",unsafe_allow_html=True)
+    st.markdown("<div class='callout'><b>State-machine prototype.</b> HRV-S, HRV-M and HRV-E are modeled as permissioned digital records of economic interests in the regulated vault wrapper. The ledger demonstrates ownership, mint/burn lifecycle, wallet eligibility, NAV synchronization and distributions. It is not yet a deployed smart contract or official transfer-agent record.</div>",unsafe_allow_html=True)
 
-| Class | Role | Illustrative economics |
-|---|---|---|
-| **HRV-S** | Senior participation | First priority in distributions; lower loss absorption |
-| **HRV-M** | Mezzanine participation | Intermediate return / loss layer |
-| **HRV-E** | Equity / first-loss | Highest risk; residual economics and first-loss protection |
+    if "token_registry" not in st.session_state:
+        st.session_state.token_registry=[dict(x) for x in DEFAULT_INVESTOR_REGISTRY]
+    if "token_events" not in st.session_state:
+        st.session_state.token_events=[]
+    if "token_nav_hedge_ratio" not in st.session_state:
+        st.session_state.token_nav_hedge_ratio=MEDUSDI_DEFAULTS["portfolio_hedge_ratio"]
 
-A regulated CPO/SPV or equivalent institutional wrapper would remain the legal capital vehicle. The token is the programmable accounting and ownership layer—not a substitute for regulated execution, clearing or fund governance.
-""")
+    token_nav=vault_nav(SAMPLE_PORTFOLIO,CARE_HRV_01["target_capital"],st.session_state.token_nav_hedge_ratio)
+    class_econ=token_class_economics(CARE_HRV_01["target_capital"],token_nav["nav"])
+
+    st.markdown("### 1 · HRV-S / HRV-M / HRV-E token economics")
+    te=class_econ.copy()
+    for col in ["issued_capital","token_supply","class_nav"]:
+        te[col]=te[col].map(money)
+    te["target_pct"]=te["target_pct"].map(lambda x:f"{x:.0%}")
+    te["nav_per_token"]=te["nav_per_token"].map(lambda x:"USD "+f"{x:,.4f}")
+    te.columns=["Class","Role","Target %","Issued capital","Token supply","Class NAV","NAV / token","Transfer policy","Lock-up days","Distribution priority","Loss priority"]
+    st.dataframe(te,use_container_width=True,hide_index=True)
+    st.caption("Prototype convention: initial issue price is USD 1.00 per token. Current NAV/token is synchronized from modeled vault NAV. Legal form, denomination and final class rights remain subject to counsel.")
+
+    st.markdown("### 2 · Mint / burn subscription lifecycle")
+    st.markdown("<div class='dark'><b>Lifecycle:</b> "+" → ".join(TOKEN_LIFECYCLE)+"</div>",unsafe_allow_html=True)
+
+    registry=st.session_state.token_registry
+    approved=[r["wallet"] for r in registry if r.get("whitelisted")]
+    holders=[r["wallet"] for r in registry if float(r.get("tokens",0))>0]
+    class_nav_lookup={r["class"]:r["nav_per_token"] for r in class_econ.to_dict("records")}
+
+    l1,l2=st.columns(2,gap="large")
+    with l1:
+        st.markdown("#### Mint on subscription")
+        mint_wallet=st.selectbox("Approved wallet",approved,key="mint_wallet")
+        mint_class=st.selectbox("Token class",["HRV-S","HRV-M","HRV-E"],key="mint_class")
+        mint_nav=class_nav_lookup[mint_class]
+        mint_cash=st.number_input("Subscription cash",min_value=10000.0,max_value=5000000.0,value=250000.0,step=10000.0,key="mint_cash")
+        st.metric("Current mint NAV / token","USD "+f"{mint_nav:,.4f}")
+        if st.button("Accept subscription & mint",key="mint_btn"):
+            try:
+                updated,event=mint_tokens(registry,mint_wallet,mint_class,mint_cash,mint_nav)
+                st.session_state.token_registry=updated
+                st.session_state.token_events.insert(0,event)
+                st.success(f"Minted {event['tokens']:,.2f} {mint_class} tokens to {mint_wallet}.")
+                st.rerun()
+            except Exception as exc:
+                st.error(str(exc))
+    with l2:
+        st.markdown("#### Burn on approved redemption")
+        burn_wallet=st.selectbox("Holder wallet",holders,key="burn_wallet")
+        selected=next(r for r in registry if r["wallet"]==burn_wallet)
+        burn_class=selected["class"]
+        burn_nav=class_nav_lookup.get(burn_class,1.0)
+        max_tokens=float(selected["tokens"])
+        burn_amount=st.number_input("Tokens to burn",min_value=0.0,max_value=max_tokens,value=min(100000.0,max_tokens),step=10000.0,key="burn_amount")
+        st.metric("Redemption NAV / token","USD "+f"{burn_nav:,.4f}")
+        if st.button("Approve redemption & burn",key="burn_btn"):
+            try:
+                updated,event=burn_tokens(registry,burn_wallet,burn_amount,burn_nav)
+                st.session_state.token_registry=updated
+                st.session_state.token_events.insert(0,event)
+                st.success("Burned "+f"{event['tokens']:,.2f}"+" tokens; modeled proceeds "+money(event["redemption_proceeds"])+".")
+                st.rerun()
+            except Exception as exc:
+                st.error(str(exc))
+
+    st.markdown("### 3 · Permissioned wallet registry")
+    summary=registry_summary(st.session_state.token_registry)
+    rg1,rg2,rg3,rg4=st.columns(4)
+    rg1.metric("Registry wallets",summary["wallets"])
+    rg2.metric("Whitelisted",summary["approved_wallets"])
+    rg3.metric("Active holders",summary["active_holders"])
+    rg4.metric("Pending approval",summary["pending_wallets"])
+
+    pending=[r["wallet"] for r in st.session_state.token_registry if not r.get("whitelisted")]
+    if pending:
+        wl1,wl2=st.columns([1,2])
+        with wl1:
+            pending_wallet=st.selectbox("Pending wallet",pending,key="pending_wallet")
+        with wl2:
+            st.write("")
+            st.write("")
+            if st.button("Approve / whitelist wallet",key="whitelist_btn"):
+                try:
+                    updated,event=whitelist_wallet(st.session_state.token_registry,pending_wallet)
+                    st.session_state.token_registry=updated
+                    st.session_state.token_events.insert(0,event)
+                    st.success(pending_wallet+" approved and whitelisted.")
+                    st.rerun()
+                except Exception as exc:
+                    st.error(str(exc))
+
+    reg_df=pd.DataFrame(st.session_state.token_registry)
+    reg_df["tokens"]=reg_df["tokens"].map(lambda x:f"{float(x):,.2f}")
+    reg_df.columns=["Wallet","Investor / account","Jurisdiction","Eligibility","Whitelisted","Lock-up","Class","Tokens","State"]
+    st.dataframe(reg_df,use_container_width=True,hide_index=True)
+    st.caption("Transfers are modeled as whitelist-only. KYC/AML, investor eligibility, jurisdiction checks, the official investor register and transfer-agent functions remain regulated off-chain processes.")
+
+    st.markdown("### 4 · NAV + distribution synchronization")
+    sync1,sync2,sync3=st.columns(3)
+    with sync1:
+        token_hedge_ratio=st.slider("NAV MEDUSDi hedge ratio",0,100,int(st.session_state.token_nav_hedge_ratio*100),5,key="token_sync_hedge")/100
+        st.session_state.token_nav_hedge_ratio=token_hedge_ratio
+    with sync2:
+        distributable_cash=st.number_input("Modeled distributable cash",min_value=0.0,max_value=5000000.0,value=750000.0,step=50000.0,key="dist_cash")
+    with sync3:
+        st.metric("Synchronized vault NAV",money(token_nav["nav"]))
+
+    synced=token_nav_distribution_sync(
+        CARE_HRV_01["target_capital"],token_nav["nav"],distributable_cash,
+        senior_pref=WATERFALL_DEFAULTS["senior_pref"],mezz_pref=WATERFALL_DEFAULTS["mezz_pref"]
+    )
+    sync_view=synced.copy()
+    for col in ["token_supply","class_nav","distribution"]:
+        sync_view[col]=sync_view[col].map(money)
+    for col in ["nav_per_token","distribution_per_token","post_distribution_reference_value"]:
+        sync_view[col]=sync_view[col].map(lambda x:"USD "+f"{x:,.4f}")
+    sync_view.columns=["Class","Token supply","Class NAV","NAV / token","Distribution","Distribution / token","NAV + distribution reference","Sync state"]
+    st.dataframe(sync_view,use_container_width=True,hide_index=True)
+
+    st.markdown("#### Token ledger event log")
+    if st.session_state.token_events:
+        st.dataframe(pd.DataFrame(st.session_state.token_events),use_container_width=True,hide_index=True)
+    else:
+        st.info("No session events yet. Approve a wallet, mint a subscription or burn a redemption to create ledger events.")
+
+    st.markdown("<div class='dark'><b>On-chain boundary:</b> ownership record, class, token supply, NAV reference, mint/burn state, distribution entitlement and settlement-state references can be represented on-chain. Cash custody, event contracts, KYC/AML, tax records, official NAV approval and the legal investor register remain with regulated service providers.</div>",unsafe_allow_html=True)
+    st.caption("Session-state prototype only: actions reset when the Streamlit session resets. No blockchain transaction is submitted and no legal ownership changes occur.")
 
 with tabs[10]:
     st.markdown("<div class='section'>Oriel reference architecture</div>",unsafe_allow_html=True)
