@@ -91,6 +91,7 @@ def main():
     try:
         rows=fetch_cdc_rows(limit=5000)
         cdc_summary["rows_fetched"]=len(rows)
+        cdc_summary["sample_keys"]=sorted(list(rows[0].keys())) if rows else []
         ledger=load_ledger()
         records=ledger.setdefault("records",{})
         new_count=0
