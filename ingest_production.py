@@ -7,13 +7,15 @@ from pathlib import Path
 
 import pandas as pd
 
-from live_data import BLS_SERIES, fetch_bls_series, fetch_cdc_rows
+from live_data import BLS_SERIES, fetch_bls_series, fetch_bls_special_index, fetch_cdc_rows
+from oriel_event_marks import generate_event_marks
 
 DATA_DIR=Path("data")
 DATA_DIR.mkdir(exist_ok=True)
 SNAPSHOT_PATH=DATA_DIR/"public_snapshot.json"
 BLS_PATH=DATA_DIR/"bls_history.csv"
 CDC_LEDGER_PATH=DATA_DIR/"cdc_first_print.json"
+ORIEL_MARKS_PATH=DATA_DIR/"oriel_event_marks.json"
 CDC_SETTLEMENT_DATASET="vutn-jzwm"
 
 DATE_KEYS=("week_end","week_ending","weekendingdate","week_ending_date","week_end_date","date")
@@ -63,6 +65,12 @@ def main():
     bls_latest={}
     try:
         raw=fetch_bls_series(max(year-10,2015),year)
+        # SIHCARE3 is a BLS PPI special index. Pull it from the official
+        # Special Indexes flat file because mixed Public API requests may omit it.
+        try:
+            raw["SIHCARE3"]=fetch_bls_special_index("SIHCARE3")
+        except Exception as exc:
+            errors.append("BLS SIHCARE3: "+str(exc))
         frames=[]
         reverse={sid:name for name,sid in BLS_SERIES.items()}
         for sid,df in raw.items():
@@ -126,12 +134,34 @@ def main():
     except Exception as exc:
         errors.append("CDC: "+str(exc))
 
+    # Oriel event-mark artifact
+    mark_summary={"status":"unavailable","mark_count":0,"live_mark_count":0}
+    try:
+        if BLS_PATH.exists():
+            mark_bls=pd.read_csv(BLS_PATH)
+            mark_bls["date"]=pd.to_datetime(mark_bls["date"])
+        else:
+            mark_bls=pd.DataFrame(columns=["date","value","series_id","series"])
+        ledger_for_marks=load_ledger()
+        marks=generate_event_marks(mark_bls,ledger_for_marks)
+        ORIEL_MARKS_PATH.write_text(json.dumps(marks,indent=2,sort_keys=True))
+        mark_summary={
+            "status":"live",
+            "methodology_version":marks.get("methodology_version"),
+            "generated_at":marks.get("generated_at"),
+            "mark_count":marks.get("mark_count",0),
+            "live_mark_count":marks.get("live_mark_count",0),
+        }
+    except Exception as exc:
+        errors.append("Oriel event marks: "+str(exc))
+
     snapshot={
         "generated_at":now,
         "status":"healthy" if not errors else "degraded",
         "errors":errors,
         "bls_latest":bls_latest,
         "cdc":cdc_summary,
+        "oriel_event_marks":mark_summary,
         "medusdi":{
             "spot_status":"not_connected",
             "reference_status":"live_medical_cpi" if "Medical CPI" in bls_latest else "unavailable",
