@@ -3,7 +3,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 from live_data import fetch_oriel_marks
-from risk_graph import build_risk_graph,event_table,neighborhood,layered_layout
+from risk_graph import build_risk_graph,event_table,neighborhood,layered_layout,CLIENT_EXPOSURE_PRESETS,client_basis_score
 from vault_engine import SAMPLE_PORTFOLIO,RISK_FAMILY_HEALTHCARE_BETA,correlation_matrix_frame
 
 POOLS=[
@@ -14,12 +14,12 @@ POOLS=[
 
 @st.cache_data(ttl=900,show_spinner=False)
 def _state():
-    return build_risk_graph(SAMPLE_PORTFOLIO,fetch_oriel_marks(),POOLS,RISK_FAMILY_HEALTHCARE_BETA,correlation_matrix_frame(SAMPLE_PORTFOLIO,1.0))
+    return build_risk_graph(SAMPLE_PORTFOLIO,fetch_oriel_marks(),POOLS,RISK_FAMILY_HEALTHCARE_BETA,correlation_matrix_frame(SAMPLE_PORTFOLIO,1.0),client_exposures=CLIENT_EXPOSURE_PRESETS)
 
 def render_risk_graph_page():
     st.set_page_config(page_title="CareFi · Risk Graph",page_icon="◈",layout="wide")
     st.title("CareFi Risk Graph")
-    st.caption("Healthcare exposure → public print → basis → related risks → hedge factors → eligible capacity")
+    st.caption("Client economic exposure → public proxy → basis assessment → event contract → hedge factors → eligible capacity")
     g=_state(); s=g["summary"]
     a,b,c,d,e=st.columns(5)
     a.metric("Healthcare risks",s["event_count"]); b.metric("Graph nodes",s["node_count"]); c.metric("Relationships",s["edge_count"])
@@ -34,7 +34,7 @@ def render_risk_graph_page():
     fig=go.Figure()
     fig.add_trace(go.Scatter(x=ex,y=ey,mode="lines",hoverinfo="skip",line=dict(width=1),showlegend=False))
     if cx: fig.add_trace(go.Scatter(x=cx,y=cy,mode="lines",hoverinfo="skip",line=dict(width=2,dash="dot"),name="Correlation"))
-    names={"public_print":"Public print","geography":"Geography","event":"Healthcare risk","risk_family":"Risk family","hedge":"Hedge factor","capital_pool":"Capital pool"}
+    names={"economic_exposure":"Client exposure","public_print":"Public proxy","geography":"Geography","basis_assessment":"Basis assessment","event":"Event contract","risk_family":"Risk family","hedge":"Hedge factor","capital_pool":"Capital pool"}
     for kind in names:
         ns=[n for n in g["nodes"] if n["type"]==kind and n["id"] in pos]
         if not ns: continue
@@ -45,7 +45,7 @@ def render_risk_graph_page():
                 hover.append("<b>"+str(n["label"])+"</b><br>Basis "+str(n.get("basis_grade","—"))+"<br>Oriel FV "+(f"{float(fv):.1%}" if fv is not None else "—")+"<br>Connectivity "+f"{float(n.get('basis_connectivity_score',0)):.0f}/100")
             else: hover.append("<b>"+str(n["label"])+"</b><br>"+names[kind])
         fig.add_trace(go.Scatter(x=[pos[n["id"]][0] for n in ns],y=[pos[n["id"]][1] for n in ns],mode="markers+text",text=[n["label"] for n in ns],textposition="top center",hovertext=hover,hoverinfo="text",marker=dict(size=[22 if kind=="event" else 16 for _ in ns],line=dict(width=1)),name=names[kind]))
-    fig.update_xaxes(tickmode="array",tickvals=[0,1,2,3],ticktext=["Public data / geography","Healthcare risks","Risk factors","Capital pools"],showgrid=False,zeroline=False)
+    fig.update_xaxes(tickmode="array",tickvals=[0,1,2,3,4,5],ticktext=["Client exposure","Public proxy","Basis","Event contract","Risk factors","Capital pools"],showgrid=False,zeroline=False)
     fig.update_yaxes(showticklabels=False,showgrid=False,zeroline=False)
     fig.update_layout(height=650,margin=dict(l=20,r=20,t=30,b=20),legend_orientation="h",legend_y=-0.12)
     st.plotly_chart(fig,use_container_width=True,config={"displayModeBar":False})
