@@ -92,6 +92,10 @@ def main():
         rows=fetch_cdc_rows(limit=5000)
         cdc_summary["rows_fetched"]=len(rows)
         cdc_summary["sample_keys"]=sorted(list(rows[0].keys())) if rows else []
+        cdc_summary["sample_row"]={k:rows[0].get(k) for k in cdc_summary["sample_keys"][:20]} if rows else {}
+        fallback_rows=fetch_cdc_rows(dataset_id="vutn-jzwm",limit=5)
+        cdc_summary["fallback_schema"]=sorted(list(fallback_rows[0].keys())) if fallback_rows else []
+        cdc_summary["fallback_sample"]={k:fallback_rows[0].get(k) for k in cdc_summary["fallback_schema"][:20]} if fallback_rows else {}
         ledger=load_ledger()
         records=ledger.setdefault("records",{})
         new_count=0
