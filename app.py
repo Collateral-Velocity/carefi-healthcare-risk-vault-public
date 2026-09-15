@@ -148,33 +148,17 @@ def _protocol_pool_quote(pool,payload):
     }
 
 def route_capacity_request(payload):
-    quotes=[_protocol_pool_quote(pool,payload) for pool in PROTOCOL_CAPITAL_POOLS]
-    executable=sorted(
-        [q for q in quotes if q["eligible_capacity"]>0 and q["minimum_price"] is not None],
-        key=lambda q:(q["minimum_price"],-q["eligible_capacity"])
+    enriched=dict(payload)
+    enriched["healthcare_beta"]=float(
+        enriched.get("healthcare_beta",RISK_FAMILY_HEALTHCARE_BETA.get(str(enriched["risk_family"]),0.0))
     )
-    remaining=float(payload["requested_notional"])
-    allocations=[]
-    weighted_price=0.0
-    total_hedge=0.0
-    for quote in executable:
-        if remaining<=0:
-            break
-        allocation=min(remaining,float(quote["eligible_capacity"]))
-        hedge_share=allocation/quote["eligible_capacity"] if quote["eligible_capacity"] else 0.0
-        allocated_hedge=float(quote["medusdi_hedge"])*hedge_share
-        allocations.append({**quote,"allocated_notional":allocation,"allocated_medusdi_hedge":allocated_hedge})
-        weighted_price+=allocation*float(quote["minimum_price"])
-        total_hedge+=allocated_hedge
-        remaining-=allocation
-    assembled=float(payload["requested_notional"])-max(remaining,0.0)
-    return {
-        "quotes":quotes,"allocations":allocations,"requested_notional":float(payload["requested_notional"]),
-        "assembled_capacity":assembled,"unfilled":max(remaining,0.0),
-        "blended_price":weighted_price/assembled if assembled else 0.0,
-        "blended_medusdi_hedge":total_hedge,
-        "fill_ratio":assembled/float(payload["requested_notional"]) if float(payload["requested_notional"]) else 0.0,
-    }
+    corr=correlation_matrix_frame(SAMPLE_PORTFOLIO,1.0).to_numpy()
+    return optimize_capacity(
+        enriched,
+        PROTOCOL_CAPITAL_POOLS,
+        portfolio=SAMPLE_PORTFOLIO,
+        corr=corr,
+    )
 
 def protocol_transaction_snapshot(payload):
     routed=route_capacity_request(payload)
