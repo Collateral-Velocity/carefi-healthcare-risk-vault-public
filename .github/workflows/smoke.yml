@@ -84,6 +84,10 @@ jobs:
               assert "HERW 0.3.1" in body
               assert "ORIEL UNDERWRITING / BASIS TRANSLATION" in body
               assert "EXPOSURE INTAKE" in body
+              logo=page.locator(".oriel-logo")
+              assert logo.count() == 1, "Oriel logo element missing"
+              loaded=logo.evaluate("(el) => el.complete && el.naturalWidth > 0 && el.naturalHeight > 0")
+              assert loaded, "Oriel logo did not render"
               page.screenshot(path="/tmp/workbench-render.png", full_page=True)
               browser.close()
           PY
