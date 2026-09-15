@@ -68,9 +68,9 @@ def main():
         # SIHCARE3 is a BLS PPI special index. Pull it from the official
         # Special Indexes flat file because mixed Public API requests may omit it.
         try:
-            raw["SIHCARE3"]=fetch_bls_special_index("SIHCARE3",start_year=max(year-10,2015),end_year=year)
+            raw["WPUSIHCARE3"]=fetch_bls_special_index("WPUSIHCARE3",start_year=max(year-10,2015),end_year=year)
         except Exception as exc:
-            errors.append("BLS SIHCARE3: "+str(exc))
+            errors.append("BLS WPUSIHCARE3 / SIHCARE3: "+str(exc))
         frames=[]
         reverse={sid:name for name,sid in BLS_SERIES.items()}
         for sid,df in raw.items():
