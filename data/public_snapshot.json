@@ -1,5 +1,11 @@
 {
   "bls_latest": {
+    "Healthcare Services PPI": {
+      "date": "2026-08-01",
+      "series_id": "WPUSIHCARE3",
+      "value": 138.236,
+      "yoy_pct": 2.9529831460255673
+    },
     "Medical CPI": {
       "date": "2025-12-01",
       "series_id": "CUUR0000SAM",
@@ -32,10 +38,8 @@
       "week_end": "2023-10-07T00:00:00.000"
     }
   },
-  "errors": [
-    "BLS SIHCARE3: SIHCARE3 not found via BLS API or PPI Special Indexes flat file"
-  ],
-  "generated_at": "2026-09-15T07:35:42.830229+00:00",
+  "errors": [],
+  "generated_at": "2026-09-15T07:37:30.845151+00:00",
   "medusdi": {
     "note": "MEDUSDi spot requires an explicit token/pool address; Medical CPI is the live fair-value reference input only.",
     "reference_series": "CUUR0000SAM",
@@ -43,13 +47,13 @@
     "spot_status": "not_connected"
   },
   "oriel_event_marks": {
-    "generated_at": "2026-09-15T07:35:44.796307+00:00",
-    "live_mark_count": 3,
+    "generated_at": "2026-09-15T07:37:32.212864+00:00",
+    "live_mark_count": 4,
     "mark_count": 6,
     "methodology_version": "OER-HC-1.0.0",
     "status": "live"
   },
-  "status": "degraded",
+  "status": "healthy",
   "venue": {
     "note": "Venue collateral/account feed requires authorized API credentials.",
     "status": "not_connected"
