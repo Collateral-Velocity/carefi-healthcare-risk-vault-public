@@ -990,7 +990,22 @@ with tabs[10]:
 
 with tabs[11]:
     st.markdown("<div class='section'>Tokenization / Investor Registry</div>",unsafe_allow_html=True)
-    st.markdown("<div class='callout'><b>State-machine prototype.</b> HRV-S, HRV-M and HRV-E are modeled as permissioned digital records of economic interests in the regulated vault wrapper. The ledger demonstrates ownership, mint/burn lifecycle, wallet eligibility, NAV synchronization and distributions. It is not yet a deployed smart contract or official transfer-agent record.</div>",unsafe_allow_html=True)
+    st.markdown("<div class='callout'><b>On-chain implementation + operating prototype.</b> The repo now contains compiled Solidity prototypes for HRV-S, HRV-M and HRV-E plus a shared permissioned Eligibility Registry. The interactive ledger below remains a Streamlit operating simulation; no contract is deployed and it is not an official transfer-agent record.</div>",unsafe_allow_html=True)
+
+    st.markdown("### On-chain contract layer")
+    oc1,oc2,oc3,oc4=st.columns(4)
+    oc1.metric("Vault share classes","3","HRV-S · HRV-M · HRV-E")
+    oc2.metric("Transfer policy","Permissioned","registry-gated")
+    oc3.metric("Wallet recovery","Implemented","compliance-approved")
+    oc4.metric("Deployment status","NOT DEPLOYED","prototype / unaudited")
+
+    contract_rows=[
+        ["EligibilityRegistry.sol","Eligibility + transfer control","Active flag · class mask · lock-up · jurisdiction hash · compliance admin · wallet replacement"],
+        ["VaultShareToken.sol","Permissioned vault interest","ERC-20-compatible balances · operator mint/burn · restricted transfers · pause · balance recovery"],
+        ["CAREHRV01ShareSuite.sol","Deployment suite","One registry + HRV-S + HRV-M + HRV-E"],
+    ]
+    st.dataframe(pd.DataFrame(contract_rows,columns=["Contract","Role","Implemented controls"]),use_container_width=True,hide_index=True)
+    st.caption("No plaintext KYC data is stored on-chain. The contracts carry eligibility state and opaque compliance metadata only; the legal investor register remains off-chain. Production deployment requires legal review, security audit and administrator/multisig ownership.")
 
     if "token_registry" not in st.session_state:
         st.session_state.token_registry=[dict(x) for x in DEFAULT_INVESTOR_REGISTRY]
