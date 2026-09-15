@@ -64,9 +64,14 @@ def _first_present(row: dict, keys: tuple[str,...]):
             return row.get(key)
     return None
 
-def fetch_cdc_rows(dataset_id: str = "rdmq-nq56", limit: int = 500, timeout: int = 10) -> list[dict]:
+def fetch_cdc_rows(dataset_id: str = "rdmq-nq56", limit: int = 500, timeout: int = 10, where: str | None = None, order: str | None = None) -> list[dict]:
     url=f"{CDC_BASE}/{dataset_id}.json"
-    resp=requests.get(url,params={"$limit":limit},timeout=timeout)
+    params={"$limit":limit}
+    if where:
+        params["$where"]=where
+    if order:
+        params["$order"]=order
+    resp=requests.get(url,params=params,timeout=timeout)
     resp.raise_for_status()
     return resp.json()
 
