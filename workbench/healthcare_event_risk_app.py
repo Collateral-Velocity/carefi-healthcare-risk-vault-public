@@ -37,9 +37,9 @@ METHODOLOGY_STATUS = "Research / actuarial review pending"
 
 
 def _logo_data_uri() -> str:
-    p = PROJECT_ROOT / "assets" / "oriel_logo.png"
+    p = PROJECT_ROOT / "assets" / "oriel_logo.svg"
     if p.exists():
-        return f"data:image/png;base64,{base64.b64encode(p.read_bytes()).decode()}"
+        return f"data:image/svg+xml;base64,{base64.b64encode(p.read_bytes()).decode()}"
     return ""
 
 
