@@ -1,0 +1,32 @@
+name: Production Data Ingestion
+
+on:
+  schedule:
+    - cron: "17 12 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements.txt
+      - name: Fetch and persist public production feeds
+        run: python ingest_production.py
+      - name: Commit changed snapshots
+        run: |
+          git config user.name "carefi-data-bot"
+          git config user.email "carefi-data-bot@users.noreply.github.com"
+          git add data/public_snapshot.json data/bls_history.csv data/cdc_first_print.json
+          if git diff --cached --quiet; then
+            echo "No feed changes"
+          else
+            git commit -m "Update production public-data snapshot"
+            git push
+          fi
