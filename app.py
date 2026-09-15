@@ -195,7 +195,7 @@ st.markdown("""
 html,body,[class*="css"]{font-family:'DM Sans',sans-serif;color:#172033}
 .stApp{background:#f4f2ed}.block-container{padding:0 2rem 4rem!important;max-width:100%!important}
 #MainMenu,footer,header{visibility:hidden}
-.topbar{background:#101827;color:white;margin:0 -2rem 1.2rem;padding:.7rem 2rem;display:flex;justify-content:space-between;align-items:center;gap:1rem}\n.brand-logo-wrap{display:flex;align-items:center;gap:.9rem}.brand-logo{height:38px;width:auto;display:block;background:white;border-radius:5px;padding:3px 7px}.brand-wordmark{font-size:.78rem;font-weight:800;letter-spacing:.08em;color:white}.tag{font-size:.72rem;color:#aeb8c7;letter-spacing:.08em}
+.topbar{background:#101827;color:white;margin:0 -2rem 1.2rem;padding:.7rem 2rem;display:flex;justify-content:space-between;align-items:center;gap:1rem}\n.brand-logo-wrap{display:flex;align-items:center}.brand-logo{height:44px;width:auto;display:block;background:white;border-radius:5px;padding:3px 7px}.tag{font-size:.72rem;color:#aeb8c7;letter-spacing:.08em}
 .hero{background:white;border:1px solid #ddd8cf;border-radius:12px;padding:1.25rem 1.35rem;margin-bottom:1rem}
 .hero h1{margin:0;font-size:1.65rem}.hero p{margin:.35rem 0 0;color:#5c6678;font-size:.9rem}
 .section{font-size:.72rem;font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:#596273;margin:1.1rem 0 .5rem}
@@ -223,7 +223,7 @@ html,body,[class*="css"]{font-family:'DM Sans',sans-serif;color:#172033}
 </style>
 """,unsafe_allow_html=True)
 
-st.markdown(f"<div class='topbar'><div class='brand-logo-wrap'><img class='brand-logo' src='{CAREFI_LOGO_DATA_URI}' alt='CareFi logo'><div class='brand-wordmark'>CAREFI EVENT CAPACITY PROTOCOL</div></div><div class='tag'>V1.0</div></div>",unsafe_allow_html=True)
+st.markdown(f"<div class='topbar'><div class='brand-logo-wrap'><img class='brand-logo' src='{CAREFI_LOGO_DATA_URI}' alt='CareFi logo'></div><div class='tag'>EVENT CAPACITY PROTOCOL · V1.0</div></div>",unsafe_allow_html=True)
 st.markdown("<div class='hero'><h1>CareFi Event Capacity Protocol</h1><p>Standardize event risk, route it to institutional capital, attach healthcare-inflation hedges, and carry the position through settlement and investor distribution. <b>First modeled vault: CARE-HRV-01.</b></p></div>",unsafe_allow_html=True)
 
 if "payload" not in st.session_state:
