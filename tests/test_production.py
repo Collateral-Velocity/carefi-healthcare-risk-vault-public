@@ -48,11 +48,11 @@ def test_kalshi_missing_credentials_is_not_connected():
 
 def test_bls_sihcare3_flat_file_parser():
     from live_data import parse_bls_special_index_text
-    sample="series_id\tyear\tperiod\tvalue\tfootnote_codes\nSIHCARE3\t2026\tM07\t150.1\t\nSIHCARE3\t2026\tM08\t151.2\tP\nWPU00000000\t2026\tM08\t100.0\t\n"
-    df=parse_bls_special_index_text(sample,"SIHCARE3")
+    sample="series_id\tyear\tperiod\tvalue\tfootnote_codes\nWPUSIHCARE3\t2026\tM07\t150.1\t\nWPUSIHCARE3\t2026\tM08\t151.2\tP\nWPU00000000\t2026\tM08\t100.0\t\n"
+    df=parse_bls_special_index_text(sample,"WPUSIHCARE3")
     assert len(df)==2
     assert list(df["value"])==[150.1,151.2]
-    assert list(df["series_id"].unique())==["SIHCARE3"]
+    assert list(df["series_id"].unique())==["WPUSIHCARE3"]
 
 
 def test_oriel_event_marks_use_live_bls_series():
