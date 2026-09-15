@@ -19,7 +19,7 @@ BLS_PPI_SPECIAL_INDEX_URL="https://download.bls.gov/pub/time.series/wp/wp.data.1
 BLS_SERIES={
     "Medical CPI":"CUUR0000SAM",
     "Medical Care Services CPI":"CUUR0000SAM2",
-    "Healthcare Services PPI":"SIHCARE3",
+    "Healthcare Services PPI":"WPUSIHCARE3",
 }
 
 LIVE_SOURCE_REGISTRY=[
@@ -65,7 +65,7 @@ def fetch_bls_series(start_year: int, end_year: int, timeout: int = 10) -> dict[
     return parse_bls_response(resp.json())
 
 
-def parse_bls_special_index_text(text: str, series_id: str = "SIHCARE3") -> pd.DataFrame:
+def parse_bls_special_index_text(text: str, series_id: str = "WPUSIHCARE3") -> pd.DataFrame:
     rows=[]
     for raw_line in text.splitlines():
         line=raw_line.strip()
@@ -95,7 +95,7 @@ def parse_bls_special_index_text(text: str, series_id: str = "SIHCARE3") -> pd.D
     return pd.DataFrame(rows).sort_values("date").drop_duplicates("date",keep="last").reset_index(drop=True)
 
 def fetch_bls_special_index(
-    series_id: str = "SIHCARE3",
+    series_id: str = "WPUSIHCARE3",
     start_year: int | None = None,
     end_year: int | None = None,
     timeout: int = 20,
