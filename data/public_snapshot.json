@@ -32,15 +32,24 @@
       "week_end": "2023-10-07T00:00:00.000"
     }
   },
-  "errors": [],
-  "generated_at": "2026-09-15T07:29:53.310810+00:00",
+  "errors": [
+    "BLS SIHCARE3: SIHCARE3 not found via BLS API or PPI Special Indexes flat file"
+  ],
+  "generated_at": "2026-09-15T07:32:13.005872+00:00",
   "medusdi": {
     "note": "MEDUSDi spot requires an explicit token/pool address; Medical CPI is the live fair-value reference input only.",
     "reference_series": "CUUR0000SAM",
     "reference_status": "live_medical_cpi",
     "spot_status": "not_connected"
   },
-  "status": "healthy",
+  "oriel_event_marks": {
+    "generated_at": "2026-09-15T07:32:14.872389+00:00",
+    "live_mark_count": 3,
+    "mark_count": 6,
+    "methodology_version": "OER-HC-1.0.0",
+    "status": "live"
+  },
+  "status": "degraded",
   "venue": {
     "note": "Venue collateral/account feed requires authorized API credentials.",
     "status": "not_connected"
