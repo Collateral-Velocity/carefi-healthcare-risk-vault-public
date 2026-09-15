@@ -103,8 +103,27 @@ def fetch_bls_special_index(
     end_year=int(end_year or datetime.now(timezone.utc).year)
     start_year=int(start_year or max(end_year-10,2014))
 
-    # First preference: BLS single-series GET. This is the least ambiguous
-    # API signature for special-index identifiers.
+    # First preference: isolated BLS POST with an explicit history window.
+    # The canonical time-series ID for published special-index code SIHCARE3
+    # is WPUSIHCARE3.
+    try:
+        resp=requests.post(
+            BLS_API,
+            json={"seriesid":[series_id],"startyear":str(start_year),"endyear":str(end_year)},
+            headers={"Content-Type":"application/json","User-Agent":"CareFi-Oriel/1.0 data-ingestion"},
+            timeout=timeout,
+        )
+        resp.raise_for_status()
+        parsed=parse_bls_response(resp.json())
+        df=parsed.get(series_id,pd.DataFrame())
+        if df is not None and not df.empty:
+            return df
+    except Exception:
+        pass
+
+    # Fallback: single-series GET. BLS documents this signature as a
+    # recent-history endpoint, so it is useful for current marking even when
+    # the longer explicit-window request is unavailable.
     try:
         get_url=BLS_API+series_id
         resp=requests.get(
@@ -121,23 +140,7 @@ def fetch_bls_special_index(
     except Exception:
         pass
 
-    # Second preference: isolated BLS POST with an explicit history window.
-    try:
-        resp=requests.post(
-            BLS_API,
-            json={"seriesid":[series_id],"startyear":str(start_year),"endyear":str(end_year)},
-            headers={"Content-Type":"application/json","User-Agent":"CareFi-Oriel/1.0 data-ingestion"},
-            timeout=timeout,
-        )
-        resp.raise_for_status()
-        parsed=parse_bls_response(resp.json())
-        df=parsed.get(series_id,pd.DataFrame())
-        if df is not None and not df.empty:
-            return df
-    except Exception:
-        pass
-
-    # Official PPI Special Indexes flat file fallback.
+    # Last official-source fallback: PPI Special Indexes flat file.
     resp=requests.get(
         BLS_PPI_SPECIAL_INDEX_URL,
         headers={"User-Agent":"Mozilla/5.0 CareFi-Oriel/1.0 (+https://orielmarkets.com)","Accept":"text/plain,*/*"},
