@@ -14,6 +14,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: carefi-production-data-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   ingest:
     runs-on: ubuntu-latest
