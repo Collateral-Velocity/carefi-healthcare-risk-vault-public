@@ -1,0 +1,2 @@
+from risk_graph_ui import render_risk_graph_page
+render_risk_graph_page()
