@@ -21,7 +21,7 @@ jobs:
       - name: Compile Solidity contracts
         run: |
           mkdir -p /tmp/solc-out
-          npx --yes --package solc@0.8.24 solcjs --bin --base-path . --include-path . contracts/CAREHRV01ShareSuite.sol -o /tmp/solc-out
+          npx --yes --package solc@0.8.24 solcjs contracts/CAREHRV01ShareSuite.sol --bin --base-path . -o /tmp/solc-out
           test -n "$(find /tmp/solc-out -name '*.bin' -type f -size +0c -print -quit)"
       - name: Launch Streamlit and verify health
         run: |
