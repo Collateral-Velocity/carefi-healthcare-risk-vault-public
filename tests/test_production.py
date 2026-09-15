@@ -72,3 +72,26 @@ def test_oriel_event_marks_use_live_bls_series():
     assert 0 < by_id["ORIEL-HC-MCPI-2027-01"]["fair_value"] < 1
     assert 0 < by_id["ORIEL-HC-PPI-2027-01"]["fair_value"] < 1
 
+def test_contract_sources_expose_required_controls():
+    from pathlib import Path
+
+    registry=(Path("contracts")/"EligibilityRegistry.sol").read_text()
+    token=(Path("contracts")/"VaultShareToken.sol").read_text()
+    suite=(Path("contracts")/"CAREHRV01ShareSuite.sol").read_text()
+
+    for item in ["CLASS_S","CLASS_M","CLASS_E","setEligibility","replaceWallet","canTransfer"]:
+        assert item in registry
+
+    for item in ["mint","burn","recoverWallet","pauseTransfers","transferFrom","eligibilityRegistry"]:
+        assert item in token
+
+    for item in ["hrvSenior","hrvMezzanine","hrvEquity"]:
+        assert item in suite
+
+
+def test_contracts_do_not_store_plaintext_kyc_fields():
+    from pathlib import Path
+    source="\n".join(p.read_text().lower() for p in Path("contracts").glob("*.sol"))
+    for forbidden in ["social_security","passport_number","date_of_birth","home_address"]:
+        assert forbidden not in source
+
