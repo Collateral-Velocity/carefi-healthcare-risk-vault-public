@@ -14,6 +14,7 @@ DATA_DIR.mkdir(exist_ok=True)
 SNAPSHOT_PATH=DATA_DIR/"public_snapshot.json"
 BLS_PATH=DATA_DIR/"bls_history.csv"
 CDC_LEDGER_PATH=DATA_DIR/"cdc_first_print.json"
+CDC_SETTLEMENT_DATASET="vutn-jzwm"
 
 DATE_KEYS=("week_end","week_ending","weekendingdate","week_ending_date","week_end_date","date")
 VALUE_KEYS=("percent_of_ed_visits","percent_visits","visit_percentage","percentage","percent","value","data_value")
@@ -51,7 +52,7 @@ def normalize_cdc_row(row):
 def load_ledger():
     if CDC_LEDGER_PATH.exists():
         return json.loads(CDC_LEDGER_PATH.read_text())
-    return {"dataset_id":"rdmq-nq56","methodology":"first seen by scheduled ingestion; revisions ignored","records":{}}
+    return {"dataset_id":CDC_SETTLEMENT_DATASET,"methodology":"first seen by scheduled ingestion; revisions ignored","records":{}}
 
 def main():
     now=datetime.now(timezone.utc).isoformat()
@@ -89,14 +90,18 @@ def main():
     # CDC persistent first-print ledger
     cdc_summary={"rows_fetched":0,"new_first_prints":0,"latest_period":None}
     try:
-        rows=fetch_cdc_rows(limit=5000)
+        rows=fetch_cdc_rows(
+            dataset_id=CDC_SETTLEMENT_DATASET,
+            limit=50000,
+            where="pathogen='Influenza'",
+            order="week_end ASC",
+        )
+        cdc_summary["dataset_id"]=CDC_SETTLEMENT_DATASET
         cdc_summary["rows_fetched"]=len(rows)
         cdc_summary["sample_keys"]=sorted(list(rows[0].keys())) if rows else []
         cdc_summary["sample_row"]={k:rows[0].get(k) for k in cdc_summary["sample_keys"][:20]} if rows else {}
-        fallback_rows=fetch_cdc_rows(dataset_id="vutn-jzwm",limit=5)
-        cdc_summary["fallback_schema"]=sorted(list(fallback_rows[0].keys())) if fallback_rows else []
-        cdc_summary["fallback_sample"]={k:fallback_rows[0].get(k) for k in cdc_summary["fallback_schema"][:20]} if fallback_rows else {}
         ledger=load_ledger()
+        ledger["dataset_id"]=CDC_SETTLEMENT_DATASET
         records=ledger.setdefault("records",{})
         new_count=0
         latest=None
@@ -108,7 +113,7 @@ def main():
                 records[normalized["key"]]={
                     **normalized,
                     "first_seen_at":now,
-                    "source_dataset":"rdmq-nq56",
+                    "source_dataset":CDC_SETTLEMENT_DATASET,
                 }
                 new_count+=1
             p=normalized["period_end"]
