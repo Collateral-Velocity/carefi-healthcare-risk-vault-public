@@ -14,6 +14,7 @@ from cryptography.hazmat.primitives.asymmetric import padding
 
 BLS_API="https://api.bls.gov/publicAPI/v2/timeseries/data/"
 CDC_BASE="https://data.cdc.gov/resource"
+BLS_PPI_SPECIAL_INDEX_URL="https://download.bls.gov/pub/time.series/wp/wp.data.18.SpecialIndexes"
 
 BLS_SERIES={
     "Medical CPI":"CUUR0000SAM",
@@ -62,6 +63,44 @@ def fetch_bls_series(start_year: int, end_year: int, timeout: int = 10) -> dict[
     )
     resp.raise_for_status()
     return parse_bls_response(resp.json())
+
+
+def parse_bls_special_index_text(text: str, series_id: str = "SIHCARE3") -> pd.DataFrame:
+    rows=[]
+    for raw_line in text.splitlines():
+        line=raw_line.strip()
+        if not line or line.lower().startswith("series_id"):
+            continue
+        parts=[p.strip() for p in raw_line.split("\t")]
+        if len(parts)<4:
+            parts=line.split()
+        if len(parts)<4 or parts[0]!=series_id:
+            continue
+        try:
+            year=int(parts[1])
+            period=str(parts[2])
+            if not period.startswith("M") or period=="M13":
+                continue
+            month=int(period[1:])
+            value=float(parts[3])
+            rows.append({
+                "date":pd.Timestamp(year=year,month=month,day=1),
+                "value":value,
+                "series_id":series_id,
+            })
+        except (ValueError,TypeError):
+            continue
+    if not rows:
+        return pd.DataFrame(columns=["date","value","series_id"])
+    return pd.DataFrame(rows).sort_values("date").drop_duplicates("date",keep="last").reset_index(drop=True)
+
+def fetch_bls_special_index(series_id: str = "SIHCARE3", timeout: int = 20) -> pd.DataFrame:
+    resp=requests.get(BLS_PPI_SPECIAL_INDEX_URL,timeout=timeout)
+    resp.raise_for_status()
+    df=parse_bls_special_index_text(resp.text,series_id=series_id)
+    if df.empty:
+        raise RuntimeError(f"{series_id} not found in BLS PPI Special Indexes flat file")
+    return df
 
 def _first_present(row: dict, keys: tuple[str,...]):
     for key in keys:
@@ -182,13 +221,35 @@ def fetch_authenticated_json(url: str | None, token: str | None = None, timeout:
 
 ORIEL_MEDUSDI_ARTIFACT="https://orielmarkets.com/medusd/data/usdi_med_basis_monitor.json"
 ORIEL_MEDUSDI_USDC_ARTIFACT="https://orielmarkets.com/medusd/data/usdi_med_usdc_reference.json"
+ORIEL_EVENT_MARKS_PATH=DATA_DIR/"oriel_event_marks.json"
 
 def fetch_oriel_marks(timeout: int = 10) -> dict:
-    url=os.getenv("ORIEL_MARKS_URL") or ORIEL_MEDUSDI_ARTIFACT
-    result=fetch_authenticated_json(url,os.getenv("ORIEL_MARKS_TOKEN"),timeout=timeout)
+    custom_url=os.getenv("ORIEL_MARKS_URL")
+    if custom_url:
+        result=fetch_authenticated_json(custom_url,os.getenv("ORIEL_MARKS_TOKEN"),timeout=timeout)
+        if result.get("status")=="live":
+            result["source"]="Oriel configured event-mark endpoint"
+            result["url"]=custom_url
+        return result
+    if not ORIEL_EVENT_MARKS_PATH.exists():
+        return {"status":"not_connected","error":"Oriel event-mark artifact not yet generated"}
+    try:
+        payload=json.loads(ORIEL_EVENT_MARKS_PATH.read_text())
+        return {
+            "status":"live",
+            "source":"Oriel persisted healthcare event-mark artifact",
+            "payload":payload,
+            "methodology_version":payload.get("methodology_version"),
+            "generated_at":payload.get("generated_at"),
+        }
+    except Exception as exc:
+        return {"status":"error","error":str(exc)}
+
+def fetch_oriel_medusdi_reference(timeout: int = 10) -> dict:
+    result=fetch_authenticated_json(ORIEL_MEDUSDI_ARTIFACT,timeout=timeout)
     if result.get("status")=="live":
-        result["source"]="Oriel live artifact"
-        result["url"]=url
+        result["source"]="Oriel live MEDUSDi artifact"
+        result["url"]=ORIEL_MEDUSDI_ARTIFACT
     return result
 
 MEDUSDI_UNISWAP_PAIR=os.getenv("MEDUSDI_UNISWAP_PAIR","0xee1a8ace9099257c794a23d2ee2ff6e382e4d72b")
