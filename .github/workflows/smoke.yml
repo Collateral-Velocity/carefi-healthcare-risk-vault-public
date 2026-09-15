@@ -18,3 +18,17 @@ jobs:
         run: python -m py_compile app.py vault_engine.py historical_replay.py live_data.py ingest_production.py
       - name: Unit tests
         run: PYTHONPATH=. python -m pytest -q
+      - name: Launch Streamlit and verify health
+        run: |
+          streamlit run app.py --server.headless true --server.port 8501 > /tmp/streamlit.log 2>&1 &
+          APP_PID=$!
+          trap 'kill $APP_PID || true' EXIT
+          for i in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:8501/_stcore/health > /dev/null; then
+              echo "Streamlit health check passed"
+              exit 0
+            fi
+            sleep 2
+          done
+          cat /tmp/streamlit.log
+          exit 1
