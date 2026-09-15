@@ -17,10 +17,24 @@
     "latest_period": null,
     "ledger_records": 0,
     "new_first_prints": 0,
-    "rows_fetched": 5000
+    "rows_fetched": 5000,
+    "sample_keys": [
+      "buildnumber",
+      "county",
+      "ed_trends_covid",
+      "ed_trends_influenza",
+      "ed_trends_rsv",
+      "fips",
+      "geography",
+      "hsa",
+      "hsa_counties",
+      "hsa_nci_id",
+      "trend_source",
+      "week_end"
+    ]
   },
   "errors": [],
-  "generated_at": "2026-09-15T06:44:23.916337+00:00",
+  "generated_at": "2026-09-15T06:46:07.413127+00:00",
   "medusdi": {
     "note": "MEDUSDi spot requires an explicit token/pool address; Medical CPI is the live fair-value reference input only.",
     "reference_series": "CUUR0000SAM",
