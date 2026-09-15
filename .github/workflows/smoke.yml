@@ -18,6 +18,8 @@ jobs:
         run: python -m py_compile app.py vault_engine.py historical_replay.py live_data.py ingest_production.py oriel_event_marks.py risk_graph.py capacity_router_v2.py risk_graph_ui.py pages/1_Risk_Graph.py
       - name: Unit tests
         run: PYTHONPATH=. python -m pytest -q
+      - name: Import app module
+        run: PYTHONPATH=. python -c "import app"
       - name: Compile Solidity contracts
         run: |
           mkdir -p /tmp/solc-out
