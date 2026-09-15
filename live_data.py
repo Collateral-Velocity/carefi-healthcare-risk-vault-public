@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from pathlib import Path
+import json
+import os
 import pandas as pd
 import requests
 
@@ -61,11 +64,14 @@ def _first_present(row: dict, keys: tuple[str,...]):
             return row.get(key)
     return None
 
-def fetch_cdc_snapshot(dataset_id: str = "rdmq-nq56", limit: int = 500, timeout: int = 10) -> dict:
+def fetch_cdc_rows(dataset_id: str = "rdmq-nq56", limit: int = 500, timeout: int = 10) -> list[dict]:
     url=f"{CDC_BASE}/{dataset_id}.json"
     resp=requests.get(url,params={"$limit":limit},timeout=timeout)
     resp.raise_for_status()
-    rows=resp.json()
+    return resp.json()
+
+def fetch_cdc_snapshot(dataset_id: str = "rdmq-nq56", limit: int = 500, timeout: int = 10) -> dict:
+    rows=fetch_cdc_rows(dataset_id=dataset_id,limit=limit,timeout=timeout)
     latest_date=None
     latest_value=None
     for row in rows:
@@ -114,3 +120,70 @@ def fetch_public_sources(start_year: int, end_year: int) -> dict:
     except Exception as exc:
         result["errors"].append("CDC: "+str(exc))
     return result
+
+
+DATA_DIR=Path(__file__).resolve().parent/"data"
+PRODUCTION_SNAPSHOT_PATH=DATA_DIR/"public_snapshot.json"
+CDC_FIRST_PRINT_PATH=DATA_DIR/"cdc_first_print.json"
+BLS_HISTORY_PATH=DATA_DIR/"bls_history.csv"
+
+def load_production_snapshot() -> dict:
+    if not PRODUCTION_SNAPSHOT_PATH.exists():
+        return {"status":"missing","generated_at":None,"errors":["Persistent production snapshot not found."]}
+    try:
+        return json.loads(PRODUCTION_SNAPSHOT_PATH.read_text())
+    except Exception as exc:
+        return {"status":"invalid","generated_at":None,"errors":[str(exc)]}
+
+def load_cdc_first_print_ledger() -> dict:
+    if not CDC_FIRST_PRINT_PATH.exists():
+        return {"dataset_id":"rdmq-nq56","records":{},"record_count":0}
+    try:
+        ledger=json.loads(CDC_FIRST_PRINT_PATH.read_text())
+        ledger["record_count"]=len(ledger.get("records",{}))
+        return ledger
+    except Exception as exc:
+        return {"dataset_id":"rdmq-nq56","records":{},"record_count":0,"error":str(exc)}
+
+def load_persisted_bls_history() -> pd.DataFrame:
+    if not BLS_HISTORY_PATH.exists():
+        return pd.DataFrame(columns=["date","value","series_id","series"])
+    try:
+        df=pd.read_csv(BLS_HISTORY_PATH)
+        if "date" in df.columns:
+            df["date"]=pd.to_datetime(df["date"])
+        return df
+    except Exception:
+        return pd.DataFrame(columns=["date","value","series_id","series"])
+
+def fetch_authenticated_json(url: str | None, token: str | None = None, timeout: int = 10) -> dict:
+    if not url:
+        return {"status":"not_connected","error":"endpoint not configured"}
+    headers={}
+    if token:
+        headers["Authorization"]="Bearer "+token
+    try:
+        resp=requests.get(url,headers=headers,timeout=timeout)
+        resp.raise_for_status()
+        payload=resp.json()
+        return {"status":"live","payload":payload,"http_status":resp.status_code}
+    except Exception as exc:
+        return {"status":"error","error":str(exc)}
+
+def fetch_oriel_marks() -> dict:
+    return fetch_authenticated_json(
+        os.getenv("ORIEL_MARKS_URL"),
+        os.getenv("ORIEL_MARKS_TOKEN"),
+    )
+
+def fetch_medusdi_spot() -> dict:
+    return fetch_authenticated_json(
+        os.getenv("MEDUSDI_SPOT_URL"),
+        os.getenv("MEDUSDI_SPOT_TOKEN"),
+    )
+
+def fetch_venue_collateral() -> dict:
+    return fetch_authenticated_json(
+        os.getenv("VENUE_COLLATERAL_URL"),
+        os.getenv("VENUE_COLLATERAL_TOKEN"),
+    )
