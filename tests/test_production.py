@@ -45,3 +45,30 @@ def test_kalshi_missing_credentials_is_not_connected():
     assert result["status"]=="not_connected"
     assert result["provider"]=="Kalshi"
 
+
+def test_bls_sihcare3_flat_file_parser():
+    from live_data import parse_bls_special_index_text
+    sample="series_id\tyear\tperiod\tvalue\tfootnote_codes\nSIHCARE3\t2026\tM07\t150.1\t\nSIHCARE3\t2026\tM08\t151.2\tP\nWPU00000000\t2026\tM08\t100.0\t\n"
+    df=parse_bls_special_index_text(sample,"SIHCARE3")
+    assert len(df)==2
+    assert list(df["value"])==[150.1,151.2]
+    assert list(df["series_id"].unique())==["SIHCARE3"]
+
+
+def test_oriel_event_marks_use_live_bls_series():
+    import pandas as pd
+    from datetime import datetime, timezone
+    from oriel_event_marks import generate_event_marks
+
+    dates=pd.date_range("2019-01-01",periods=84,freq="MS")
+    medical=pd.DataFrame({"date":dates,"value":[100*(1.0025**i) for i in range(len(dates))],"series_id":"CUUR0000SAM","series":"Medical CPI"})
+    ppi=pd.DataFrame({"date":dates,"value":[100*(1.0020**i) for i in range(len(dates))],"series_id":"SIHCARE3","series":"Healthcare Services PPI"})
+    history=pd.concat([medical,ppi],ignore_index=True)
+    artifact=generate_event_marks(history,{"records":{}},generated_at=datetime(2026,9,15,tzinfo=timezone.utc))
+    by_id={m["contract_id"]:m for m in artifact["marks"]}
+    assert artifact["methodology_version"]=="OER-HC-1.0.0"
+    assert by_id["ORIEL-HC-MCPI-2027-01"]["source_health"]=="healthy"
+    assert by_id["ORIEL-HC-PPI-2027-01"]["source_health"]=="healthy"
+    assert 0 < by_id["ORIEL-HC-MCPI-2027-01"]["fair_value"] < 1
+    assert 0 < by_id["ORIEL-HC-PPI-2027-01"]["fair_value"] < 1
+
