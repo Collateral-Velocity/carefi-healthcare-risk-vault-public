@@ -5,7 +5,7 @@ Prototype institutional capacity layer for healthcare event markets.
 ## CARE-HRV-01
 **CARE-HRV-01 · Healthcare Event Risk Vault 2027** demonstrates how diversified capital could warehouse objectively settled healthcare event risk originated by CareFi and referenced by Oriel.
 
-### V1.0
+### V1.1
 - Preloaded Texas respiratory-utilization contract from the Oriel Healthcare Event Risk Workbench.
 - Common Oriel-to-CareFi JSON contract schema.
 - Capacity decision with eligible notional, minimum price and capital consumed.
@@ -40,5 +40,16 @@ Prototype institutional capacity layer for healthcare event markets.
 - **Execution venue** — listing, execution and settlement.
 - **CARE-HRV-01** — diversified institutional event-risk capacity.
 - **Blockchain** — programmable ownership, allocation, NAV, waterfall and settlement-state accounting.
+
+## Phase 2A historical replay + live operations
+- Verified 2025–26 first-published CDC FluView respiratory replay.
+- Live BLS historical pull for Medical CPI (CUUR0000SAM) and Healthcare Services PPI (SIHCARE3).
+- Observed CPI/PPI YoY correlation calibration.
+- Covered-position annual backtest with explicit historical-data coverage limits.
+- MEDUSDi hedge backtest uses Medical CPI as a labeled fair-value proxy, not historical token spot.
+- Live-source status layer for BLS and CDC with graceful fallback.
+- Operational position table distinguishes live reference inputs from modeled Oriel marks.
+- CMS, MEDUSDi spot, venue collateral and official Oriel live marks remain explicitly unconnected/modelled until defensible feeds are available.
+- GitHub Actions smoke workflow compiles all Python modules and runs deterministic replay/data-adapter tests on every push.
 
 Research prototype only. Not an offering, executable quote or legal structure.
