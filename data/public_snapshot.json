@@ -1,0 +1,17 @@
+{
+  "generated_at": null,
+  "status": "not_yet_ingested",
+  "errors": [],
+  "bls_latest": {},
+  "cdc": {"rows_fetched": 0, "new_first_prints": 0, "latest_period": null, "ledger_records": 0},
+  "medusdi": {
+    "spot_status": "not_connected",
+    "reference_status": "pending",
+    "reference_series": "CUUR0000SAM",
+    "note": "MEDUSDi spot requires an explicit token/pool address."
+  },
+  "venue": {
+    "status": "not_connected",
+    "note": "Venue collateral/account feed requires authorized API credentials."
+  }
+}
