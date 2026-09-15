@@ -25,6 +25,8 @@ from live_data import (
     fetch_kalshi_clearer_state,
 )
 
+from capacity_router_v2 import optimize_capacity
+
 from vault_engine import (
     CARE_HRV_01,
     SAMPLE_PORTFOLIO,
