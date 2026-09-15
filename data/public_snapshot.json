@@ -1,10 +1,10 @@
 {
   "bls_latest": {
     "Healthcare Services PPI": {
-      "date": "2025-12-01",
+      "date": "2026-08-01",
       "series_id": "WPUSIHCARE3",
-      "value": 134.221,
-      "yoy_pct": 2.3306700009148917
+      "value": 138.236,
+      "yoy_pct": 2.9529831460255673
     },
     "Medical CPI": {
       "date": "2025-12-01",
@@ -39,7 +39,7 @@
     }
   },
   "errors": [],
-  "generated_at": "2026-09-15T07:38:42.978908+00:00",
+  "generated_at": "2026-09-15T07:39:54.337383+00:00",
   "medusdi": {
     "note": "MEDUSDi spot requires an explicit token/pool address; Medical CPI is the live fair-value reference input only.",
     "reference_series": "CUUR0000SAM",
@@ -47,7 +47,7 @@
     "spot_status": "not_connected"
   },
   "oriel_event_marks": {
-    "generated_at": "2026-09-15T07:38:44.467507+00:00",
+    "generated_at": "2026-09-15T07:39:56.659491+00:00",
     "live_mark_count": 4,
     "mark_count": 6,
     "methodology_version": "OER-HC-1.0.0",
