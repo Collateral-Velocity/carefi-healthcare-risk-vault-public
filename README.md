@@ -94,3 +94,17 @@ The vault now consumes Oriel's live MEDUSDi monitor artifact as the primary spot
 - live contract and pool addresses.
 
 If the Oriel artifact is unavailable, the adapter falls back to public market data for the known Uniswap v3 pool.
+
+
+## Oriel healthcare event marks
+The production ingestion job generates `data/oriel_event_marks.json` using methodology `OER-HC-1.0.0`.
+- Respiratory touch contracts use documented priors before the observation window and first-print CDC settlement state once the window is active.
+- Medical CPI and SIHCARE3 marks blend 60% documented model prior with 40% smoothed historical annual-threshold exceedance frequency.
+- Healthy event marks are applied directly to the vault NAV hierarchy.
+- Each mark carries contract ID, source lineage, public reference state, methodology version, timestamp, basis grade and source health.
+- CMS reimbursement and specialty-drug positions remain explicitly non-live pending approved public settlement series.
+
+## SIHCARE3 production source
+`SIHCARE3` is BLS Producer Price Index special index “Health care services, private insurance patients.” Because this special index may be omitted from mixed Public Data API requests, production ingestion reads the official BLS PPI Special Indexes flat file:
+`https://download.bls.gov/pub/time.series/wp/wp.data.18.SpecialIndexes`
+The extracted series is persisted alongside Medical CPI in `data/bls_history.csv`.
