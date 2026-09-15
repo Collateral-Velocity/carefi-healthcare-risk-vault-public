@@ -22,7 +22,7 @@ def render_risk_graph_page():
     st.caption("Client economic exposure → public proxy → basis assessment → event contract → hedge factors → eligible capacity")
     g=_state(); s=g["summary"]
     a,b,c,d,e=st.columns(5)
-    a.metric("Healthcare risks",s["event_count"]); b.metric("Graph nodes",s["node_count"]); c.metric("Relationships",s["edge_count"])
+    a.metric("Client exposures",s["client_exposure_count"]); b.metric("Healthcare risks",s["event_count"]); c.metric("Relationships",s["edge_count"])
     d.metric("Capital routable",f"{s['capital_routable_pct']:.0%}"); e.metric("Hedge connected",f"{s['hedge_connected_pct']:.0%}")
 
     pos=layered_layout(g); ex=[];ey=[];cx=[];cy=[]
@@ -50,6 +50,44 @@ def render_risk_graph_page():
     fig.update_layout(height=650,margin=dict(l=20,r=20,t=30,b=20),legend_orientation="h",legend_y=-0.12)
     st.plotly_chart(fig,use_container_width=True,config={"displayModeBar":False})
 
+    st.subheader("Parametric exposure translator")
+    preset_lookup={x["label"]:x for x in CLIENT_EXPOSURE_PRESETS}
+    selected=st.selectbox("Illustrative client exposure",list(preset_lookup.keys()),key="parametric_client_exposure")
+    base=dict(preset_lookup[selected])
+    p1,p2=st.columns([1,1])
+    with p1:
+        amount=st.number_input("Economic amount at risk",min_value=100000.0,max_value=25000000.0,value=float(base["amount_at_risk"]),step=100000.0,format="%.0f")
+        effectiveness=st.slider("Estimated hedge effectiveness",0.0,1.0,float(base["hedge_effectiveness"]),0.01)
+    with p2:
+        st.markdown("**Economic metric**")
+        st.write(base["economic_metric"])
+        st.markdown("**Mapped public proxy**")
+        st.write(base["public_proxy"])
+        st.markdown("**Target event contract**")
+        st.write(base["target_event"])
+    with st.expander("Basis model inputs"):
+        q1,q2,q3=st.columns(3)
+        publication=q1.slider("Publication quality",0.0,1.0,float(base["publication_quality"]),0.01)
+        geography=q2.slider("Geography fit",0.0,1.0,float(base["geography_fit"]),0.01)
+        timing=q3.slider("Timing fit",0.0,1.0,float(base["timing_fit"]),0.01)
+    translated={**base,"amount_at_risk":float(amount),"hedge_effectiveness":float(effectiveness),"publication_quality":float(publication),"geography_fit":float(geography),"timing_fit":float(timing)}
+    basis=client_basis_score(translated)
+    m1,m2,m3,m4=st.columns(4)
+    m1.metric("Basis Translation Score",f"{basis['score']:.0f}/100",basis["grade"])
+    m2.metric("Hedge effectiveness",f"{basis['hedge_effectiveness']:.0%}")
+    m3.metric("Amount at risk",f"${float(translated['amount_at_risk']):,.0f}")
+    m4.metric("Client type",str(translated["client_type"]))
+    path_rows=[
+        ["1 · Client exposure",translated["label"],translated["economic_metric"]],
+        ["2 · Public proxy",translated["public_proxy"],"Objective independently published reference"],
+        ["3 · Basis assessment",basis["grade"]+" · "+f"{basis['score']:.0f}/100","Estimated hedge effectiveness "+f"{basis['hedge_effectiveness']:.0%}"],
+        ["4 · Event contract",translated["target_event"],"Standardized Oriel/CareFi event risk"],
+        ["5 · Hedge factor","MEDUSDi","Common healthcare-inflation factor where applicable"],
+        ["6 · Capacity","CareFi eligible pools","Mandate, basis and concentration constraints"],
+    ]
+    st.dataframe(pd.DataFrame(path_rows,columns=["Stage","Mapped element","CareFi interpretation"]),use_container_width=True,hide_index=True)
+    st.caption("Illustrative underwriting inputs. Production basis scores would be calibrated against client outcomes and realized hedge performance.")
+
     st.subheader("Risk graph register")
     df=event_table(g)
     if not df.empty:
@@ -66,4 +104,4 @@ def render_risk_graph_page():
     x1.metric("Basis grade",n.get("basis_grade","—")); x2.metric("Connectivity",f"{float(n.get('basis_connectivity_score',0)):.0f}/100")
     x3.metric("MEDUSDi beta",f"{float(n.get('healthcare_beta',0)):.2f}"); x4.metric("Eligible pools",len(n.get("eligible_pools",[])))
     st.dataframe(neighborhood(g,nid),use_container_width=True,hide_index=True)
-    st.info("The Risk Graph is the protocol relationship layer linking settlement evidence, basis quality, related exposures, hedge sensitivity and capacity eligibility.")
+    st.info("The Risk Graph now starts with the client economic exposure. CareFi maps that exposure to an objective public proxy, scores the basis, standardizes the event contract, and then connects it to hedge factors and eligible institutional capacity.")
