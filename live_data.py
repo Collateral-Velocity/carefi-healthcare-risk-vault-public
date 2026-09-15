@@ -102,10 +102,9 @@ def fetch_bls_special_index(
 ) -> pd.DataFrame:
     end_year=int(end_year or datetime.now(timezone.utc).year)
     start_year=int(start_year or max(end_year-10,2014))
+    frames=[]
 
-    # First preference: isolated BLS POST with an explicit history window.
-    # The canonical time-series ID for published special-index code SIHCARE3
-    # is WPUSIHCARE3.
+    # BLS explicit-window POST supplies the deep calibration history.
     try:
         resp=requests.post(
             BLS_API,
@@ -117,13 +116,12 @@ def fetch_bls_special_index(
         parsed=parse_bls_response(resp.json())
         df=parsed.get(series_id,pd.DataFrame())
         if df is not None and not df.empty:
-            return df
+            frames.append(df)
     except Exception:
         pass
 
-    # Fallback: single-series GET. BLS documents this signature as a
-    # recent-history endpoint, so it is useful for current marking even when
-    # the longer explicit-window request is unavailable.
+    # BLS single-series GET is also queried because it can contain newer
+    # preliminary/current-year observations than the explicit-window response.
     try:
         get_url=BLS_API+series_id
         resp=requests.get(
@@ -135,10 +133,17 @@ def fetch_bls_special_index(
         parsed=parse_bls_response(resp.json())
         df=parsed.get(series_id,pd.DataFrame())
         if df is not None and not df.empty:
-            mask=(df["date"].dt.year>=start_year)&(df["date"].dt.year<=end_year)
-            return df.loc[mask].reset_index(drop=True)
+            frames.append(df)
     except Exception:
         pass
+
+    if frames:
+        combined=pd.concat(frames,ignore_index=True)
+        combined["date"]=pd.to_datetime(combined["date"])
+        mask=(combined["date"].dt.year>=start_year)&(combined["date"].dt.year<=end_year)
+        combined=combined.loc[mask].sort_values("date").drop_duplicates("date",keep="last").reset_index(drop=True)
+        if not combined.empty:
+            return combined
 
     # Last official-source fallback: PPI Special Indexes flat file.
     resp=requests.get(
