@@ -22,6 +22,7 @@ from live_data import (
     fetch_oriel_marks,
     fetch_medusdi_spot,
     fetch_venue_collateral,
+    fetch_kalshi_clearer_state,
 )
 
 from vault_engine import (
@@ -69,6 +70,12 @@ from vault_engine import (
 
 def money(x: float) -> str:
     return "$" + f"{x:,.0f}"
+
+def app_secret(name: str, default=None):
+    try:
+        return st.secrets.get(name,default)
+    except Exception:
+        return default
 
 
 PROTOCOL_CAPITAL_POOLS = [
@@ -1195,7 +1202,12 @@ with tabs[14]:
     persisted_bls=load_persisted_bls_history()
     oriel_feed=fetch_oriel_marks()
     medusdi_feed=fetch_medusdi_spot()
-    venue_feed=fetch_venue_collateral()
+    venue_feed=fetch_kalshi_clearer_state(
+        api_key_id=app_secret("KALSHI_API_KEY_ID"),
+        private_key_pem=app_secret("KALSHI_PRIVATE_KEY"),
+        environment=app_secret("KALSHI_ENV","production"),
+        subaccount=int(app_secret("KALSHI_SUBACCOUNT",0)),
+    )
 
     pf1,pf2,pf3,pf4=st.columns(4)
     pf1.metric("Persistent snapshot",str(snapshot.get("status","unknown")).upper())
@@ -1212,10 +1224,10 @@ with tabs[14]:
     production_rows=[
         ["BLS Medical CPI","Public reference","LIVE / PERSISTED" if "Medical CPI" in bls_latest else "PENDING / FALLBACK","CUUR0000SAM","Scheduled ingestion → versioned BLS history"],
         ["BLS Healthcare Services PPI","Public reference","LIVE / PERSISTED" if "Healthcare Services PPI" in bls_latest else "PENDING / FALLBACK","SIHCARE3","Scheduled ingestion → versioned BLS history"],
-        ["CDC NSSP / FluView","Settlement observation","LIVE / FIRST-PRINT LEDGER" if int(ledger.get("record_count",0))>0 else "PENDING FIRST INGEST","rdmq-nq56","First-seen values frozen; revisions ignored"],
-        ["Oriel fair-value marks","Valuation",str(oriel_feed.get("status","not_connected")).upper(),"ORIEL_MARKS_URL","Authenticated JSON endpoint"],
-        ["MEDUSDi spot","Hedge market",str(medusdi_feed.get("status","not_connected")).upper(),"MEDUSDI_SPOT_URL","Authenticated JSON endpoint"],
-        ["Venue / clearer collateral","Execution / treasury",str(venue_feed.get("status","not_connected")).upper(),"VENUE_COLLATERAL_URL","Authenticated JSON endpoint"],
+        ["CDC NSSP / FluView","Settlement observation","LIVE / FIRST-PRINT LEDGER" if int(ledger.get("record_count",0))>0 else "PENDING FIRST INGEST","vutn-jzwm","First-seen influenza % values frozen; revisions ignored"],
+        ["Oriel MEDUSDi reference","Valuation / hedge reference",str(oriel_feed.get("status","not_connected")).upper(),"Oriel live artifact","Ethereum + BLS monitor artifact"],
+        ["MEDUSDi spot","Hedge market",str(medusdi_feed.get("status","not_connected")).upper(),"Oriel / Uniswap v3","On-chain pool spot + contract reference"],
+        ["Kalshi clearer account","Execution / treasury",str(venue_feed.get("status","not_connected")).upper(),"Kalshi Predictions API","RSA-authenticated balance + positions"],
     ]
     st.dataframe(pd.DataFrame(production_rows,columns=["Feed","Role","Status","Source / config","Persistence"]),use_container_width=True,hide_index=True)
 
@@ -1239,30 +1251,38 @@ with tabs[14]:
     else:
         st.info("The first scheduled ingestion has not yet populated the CDC first-print ledger.")
 
-    st.markdown("#### Authenticated production endpoints")
-    endpoint_rows=[]
-    for label,feed in [
-        ("Oriel marks",oriel_feed),
-        ("MEDUSDi spot",medusdi_feed),
-        ("Venue collateral",venue_feed),
-    ]:
-        endpoint_rows.append([
-            label,
-            str(feed.get("status","not_connected")).upper(),
-            "Configured" if feed.get("status") not in ("not_connected",None) else "Endpoint/credential not configured",
-            str(feed.get("error","")) if feed.get("error") else "",
-        ])
-    st.dataframe(pd.DataFrame(endpoint_rows,columns=["Endpoint","State","Configuration","Detail"]),use_container_width=True,hide_index=True)
+    st.markdown("#### Live market + clearing feeds")
+    endpoint_rows=[
+        ["Oriel reference",str(oriel_feed.get("status","not_connected")).upper(),oriel_feed.get("source","Oriel live artifact"),str(oriel_feed.get("error","")) if oriel_feed.get("error") else ""],
+        ["MEDUSDi spot",str(medusdi_feed.get("status","not_connected")).upper(),medusdi_feed.get("source","Oriel / Uniswap v3"),str(medusdi_feed.get("error","")) if medusdi_feed.get("error") else ""],
+        ["Kalshi clearer",str(venue_feed.get("status","not_connected")).upper(),f"{venue_feed.get('environment','production')} · subaccount {venue_feed.get('subaccount',0)}",str(venue_feed.get("error","")) if venue_feed.get("error") else ""],
+    ]
+    st.dataframe(pd.DataFrame(endpoint_rows,columns=["Endpoint","State","Source / account","Detail"]),use_container_width=True,hide_index=True)
 
-    if oriel_feed.get("status")=="live":
-        st.markdown("##### Oriel live payload")
-        st.json(oriel_feed.get("payload",{}),expanded=False)
     if medusdi_feed.get("status")=="live":
-        st.markdown("##### MEDUSDi live spot payload")
-        st.json(medusdi_feed.get("payload",{}),expanded=False)
+        st.markdown("##### MEDUSDi market state")
+        ms1,ms2,ms3,ms4=st.columns(4)
+        ms1.metric("USDiMED spot",f"{float(medusdi_feed.get('price_native')):.6f} {medusdi_feed.get('quote','USDi')}" if medusdi_feed.get("price_native") is not None else "—")
+        ms2.metric("Oriel contract reference",f"{float(medusdi_feed.get('reference_value')):.6f}" if medusdi_feed.get("reference_value") is not None else "—")
+        ms3.metric("Spot / reference basis",f"{float(medusdi_feed.get('basis_pct')):+.2f}%" if medusdi_feed.get("basis_pct") is not None else "—")
+        ms4.metric("Data quality",str(medusdi_feed.get("quality_status","unknown")).replace("_"," ").upper())
+        st.caption("Pool: "+str(medusdi_feed.get("pair_address","—"))+" · As of: "+str(medusdi_feed.get("as_of","—")))
+
     if venue_feed.get("status")=="live":
-        st.markdown("##### Venue / collateral payload")
-        st.json(venue_feed.get("payload",{}),expanded=False)
+        st.markdown("##### Kalshi clearing account")
+        kb1,kb2,kb3,kb4=st.columns(4)
+        kb1.metric("Available balance",money(float(venue_feed.get("available_balance_dollars",0))))
+        kb2.metric("Portfolio value",money(float(venue_feed.get("portfolio_value_dollars",0))))
+        kb3.metric("Gross market exposure",money(float(venue_feed.get("gross_market_exposure_dollars",0))))
+        kb4.metric("Open market positions",len(venue_feed.get("market_positions",[])))
+
+        kalshi_positions=pd.DataFrame(venue_feed.get("market_positions",[]))
+        if not kalshi_positions.empty:
+            cols=[x for x in ["ticker","exchange_index","position_fp","market_exposure_dollars","realized_pnl_dollars","fees_paid_dollars","last_updated_ts"] if x in kalshi_positions.columns]
+            st.dataframe(kalshi_positions[cols],use_container_width=True,hide_index=True)
+        st.caption("Kalshi balance and portfolio value are read from the authenticated Predictions API. No order placement or fund movement is enabled in this prototype.")
+    else:
+        st.info("Kalshi clearing adapter is ready. Add KALSHI_API_KEY_ID and KALSHI_PRIVATE_KEY to the app secrets to activate live balance and position state.")
 
     st.markdown("#### Position feed provenance")
     provenance=[]
@@ -1292,7 +1312,7 @@ with tabs[14]:
         provenance.append([name,row["status"],data_state,reference,durable,row["settlement_date"]])
     st.dataframe(pd.DataFrame(provenance,columns=["Position","Lifecycle","Feed state","Reference","Durable","Settlement"]),use_container_width=True,hide_index=True)
 
-    st.markdown("<div class='dark'><b>What is genuinely productionized now:</b> scheduled BLS ingestion, durable BLS history, scheduled CDC ingestion, and a persistent first-print ledger with revision freezing. <b>What remains credential-dependent:</b> official Oriel fair-value marks, MEDUSDi market spot/liquidity, and venue/clearer collateral. Those adapters are implemented but stay NOT CONNECTED until real endpoints or credentials are supplied. No placeholder feed is promoted to LIVE.</div>",unsafe_allow_html=True)
+    st.markdown("<div class='dark'><b>Production state:</b> BLS and CDC are persisted on schedule; CDC settlement observations are frozen on first ingestion; Oriel's MEDUSDi reference is consumed from its live Ethereum/BLS artifact; MEDUSDi spot is read from the live USDiMED/USDi Uniswap v3 market with Oriel as primary source. <b>Kalshi clearing:</b> the signed balance/positions adapter is implemented and becomes LIVE only when the app receives a real API key ID + RSA private key. The adapter is read-only in this prototype—no order placement, transfers, or withdrawals.</div>",unsafe_allow_html=True)
 
 
 st.markdown("---")
