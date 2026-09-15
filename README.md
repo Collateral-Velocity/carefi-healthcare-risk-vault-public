@@ -70,3 +70,27 @@ Optional endpoint configuration:
 - `VENUE_COLLATERAL_URL` / `VENUE_COLLATERAL_TOKEN`
 
 No unconfigured endpoint is presented as live.
+
+
+## Kalshi clearing account
+The vault uses Kalshi's authenticated Predictions REST API as the venue/clearer account source:
+- `GET /portfolio/balance` for available balance and portfolio value.
+- `GET /portfolio/positions` for live event-market positions and exposure.
+- Requests use Kalshi's documented RSA-PSS / SHA-256 signature over `timestamp + method + full path`.
+- The integration is read-only. It does not place orders, transfer funds, or initiate withdrawals.
+
+Streamlit secrets / environment configuration:
+- `KALSHI_API_KEY_ID`
+- `KALSHI_PRIVATE_KEY` — PEM RSA private key; escaped `\\n` line breaks are supported.
+- `KALSHI_ENV` — `production` (default) or `demo`.
+- `KALSHI_SUBACCOUNT` — defaults to `0`.
+
+## Oriel / MEDUSDi live market feed
+The vault now consumes Oriel's live MEDUSDi monitor artifact as the primary spot/reference source. The artifact is generated from Ethereum mainnet plus BLS Medical Care CPI and includes:
+- USDiMED / USDi Uniswap v3 spot,
+- contract-derived USDiMED / USDi reference value,
+- spot/reference basis,
+- source/quality flags and timestamps,
+- live contract and pool addresses.
+
+If the Oriel artifact is unavailable, the adapter falls back to public market data for the known Uniswap v3 pool.
