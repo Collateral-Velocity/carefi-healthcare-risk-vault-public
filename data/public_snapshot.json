@@ -17,7 +17,7 @@
     "dataset_id": "vutn-jzwm",
     "latest_period": "2026-09-05",
     "ledger_records": 7946,
-    "new_first_prints": 7946,
+    "new_first_prints": 0,
     "rows_fetched": 7956,
     "sample_keys": [
       "geography",
@@ -33,7 +33,7 @@
     }
   },
   "errors": [],
-  "generated_at": "2026-09-15T06:48:20.692678+00:00",
+  "generated_at": "2026-09-15T06:56:24.085407+00:00",
   "medusdi": {
     "note": "MEDUSDi spot requires an explicit token/pool address; Medical CPI is the live fair-value reference input only.",
     "reference_series": "CUUR0000SAM",
