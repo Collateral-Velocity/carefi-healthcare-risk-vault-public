@@ -1,10 +1,19 @@
 from __future__ import annotations
 import json
 import time
+from datetime import datetime
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
+
+from historical_replay import (
+    cdc_flu_replay_frame,
+    replay_years,
+    cpi_ppi_correlation,
+    covered_portfolio_replay,
+)
+from live_data import LIVE_SOURCE_REGISTRY, fetch_public_sources
 
 from vault_engine import (
     CARE_HRV_01,
@@ -166,6 +175,10 @@ def protocol_transaction_snapshot(payload):
         "expected_loss":risk["expected_principal_loss"],"var95_loss":risk["var95_loss"],
     }
 
+@st.cache_data(ttl=3600,show_spinner=False)
+def load_public_sources(start_year:int,end_year:int):
+    return fetch_public_sources(start_year,end_year)
+
 st.set_page_config(page_title="CareFi · Event Capacity Protocol",page_icon="CF",layout="wide",initial_sidebar_state="collapsed")
 
 st.markdown("""
@@ -217,7 +230,7 @@ m3.metric("Available capacity",money(metrics["available"]))
 m4.metric("Weighted event probability",f"{metrics['weighted_probability']:.1%}")
 m5.metric("Indicative portfolio yield",f"{metrics['indicative_yield']:.1%}")
 
-tabs=st.tabs(["Protocol Overview","Transaction Flow","Vault Overview","Mandate & Terms","Request Capacity","Portfolio Impact","Portfolio","NAV & Marks","Risk Analytics","Cash & Collateral","Waterfall Simulator","Tokenized Interests","Oriel Reference Layer"])
+tabs=st.tabs(["Protocol Overview","Transaction Flow","Vault Overview","Mandate & Terms","Request Capacity","Portfolio Impact","Portfolio","NAV & Marks","Risk Analytics","Cash & Collateral","Waterfall Simulator","Tokenized Interests","Oriel Reference Layer","Historical Replay","Live Data"])
 
 with tabs[0]:
     st.markdown("<div class='section'>CareFi Event Capacity Protocol</div>",unsafe_allow_html=True)
@@ -1084,6 +1097,152 @@ with tabs[12]:
 The common schema carries contract ID, exposure, risk family, geography, public settlement print, model probability, requested notional, tenor and basis-risk grade. This keeps the Oriel reference function distinct from CareFi's underwriting and capital-allocation function.
 """)
     st.code(oriel_payload_json(),language="json")
+
+
+with tabs[13]:
+    st.markdown("<div class='section'>Phase 2A · Historical replay & calibration</div>",unsafe_allow_html=True)
+    st.markdown("<div class='callout'><b>Observed-data replay.</b> This view uses verified first-published 2025–26 CDC FluView influenza ED data plus live BLS history for Medical CPI and Healthcare Services PPI. It does not manufacture a full six-position history where public historical settlement data are not yet mapped.</div>",unsafe_allow_html=True)
+
+    history=load_public_sources(2021,datetime.now().year)
+    cpi_entry=history["bls"].get("Medical CPI",{})
+    ppi_entry=history["bls"].get("Healthcare Services PPI",{})
+    cpi_df=cpi_entry.get("data",pd.DataFrame(columns=["date","value"]))
+    ppi_df=ppi_entry.get("data",pd.DataFrame(columns=["date","value"]))
+    cdc_df=cdc_flu_replay_frame()
+
+    h1,h2,h3,h4=st.columns(4)
+    h1.metric("Verified FluView peak",f"{cdc_df['influenza_ed_pct'].max():.1f}%")
+    h2.metric("Flu 5% touch","YES" if cdc_df["influenza_ed_pct"].max()>=5.0 else "NO")
+    h3.metric("BLS Medical CPI observations",len(cpi_df))
+    h4.metric("BLS HC PPI observations",len(ppi_df))
+
+    st.markdown("#### Verified respiratory replay · 2025–26")
+    flu_chart=px.line(cdc_df,x="date",y="influenza_ed_pct",markers=True,labels={"date":"Week ending","influenza_ed_pct":"Influenza ED visits (%)"})
+    flu_chart.add_hline(y=5.0,line_dash="dash",annotation_text="5.0% touch")
+    flu_chart.update_layout(height=330,margin=dict(l=0,r=0,t=20,b=0))
+    st.plotly_chart(flu_chart,use_container_width=True,config={"displayModeBar":False})
+    st.caption("Source: verified first-published national CDC FluView weekly reports committed in the Oriel healthcare-event repository. Texas respiratory replay is shown only as a national basis proxy until a verified Texas first-print archive is loaded.")
+
+    if history["errors"]:
+        st.warning("Live historical refresh is partially degraded: "+" | ".join(history["errors"]))
+
+    if not cpi_df.empty or not ppi_df.empty:
+        annual=replay_years(cpi_df,ppi_df)
+        corr=cpi_ppi_correlation(cpi_df,ppi_df)
+        st.markdown("#### Inflation calibration")
+        c1,c2,c3=st.columns(3)
+        c1.metric("CPI ↔ PPI YoY correlation",f"{corr['correlation']:.2f}" if corr["correlation"] is not None else "N/A")
+        c2.metric("Paired monthly observations",corr["observations"])
+        c3.metric("Calibration status","OBSERVED BLS")
+
+        annual_view=annual.copy()
+        for col in ["medical_cpi_max_yoy","hc_ppi_max_yoy","national_flu_peak"]:
+            annual_view[col]=annual_view[col].map(lambda x:"—" if pd.isna(x) else f"{x:.2f}%")
+        annual_view["medical_cpi_trigger"]=annual_view["medical_cpi_trigger"].map({True:"YES",False:"NO"})
+        annual_view["hc_ppi_trigger"]=annual_view["hc_ppi_trigger"].map({True:"YES",False:"NO"})
+        annual_view["national_flu_trigger"]=annual_view["national_flu_trigger"].map({True:"YES",False:"NO"})
+        annual_view.columns=[
+            "Year","Medical CPI max YoY","HC PPI max YoY","Medical CPI ≥4%","HC PPI ≥4%",
+            "National flu peak","National flu ≥5%","TX respiratory proxy","MEDUSDi proxy return","Coverage"
+        ]
+        annual_view["MEDUSDi proxy return"]=annual_view["MEDUSDi proxy return"].map(lambda x:"—" if pd.isna(x) else f"{x:.2%}")
+        annual_view["TX respiratory proxy"]=annual_view["TX respiratory proxy"].map({True:"YES",False:"NO"})
+        st.dataframe(annual_view,use_container_width=True,hide_index=True)
+
+        hedge_notional=portfolio_healthcare_beta(SAMPLE_PORTFOLIO,MEDUSDI_DEFAULTS["portfolio_hedge_ratio"])["medusdi_hedge_notional"]
+        replay=covered_portfolio_replay(SAMPLE_PORTFOLIO,annual,hedge_notional)
+        if not replay.empty:
+            st.markdown("#### Covered-position backtest")
+            rr=replay.copy()
+            for col in ["covered_book_pnl","medusdi_proxy_hedge_pnl","hedged_covered_pnl"]:
+                rr[col]=rr[col].map(money)
+            rr.columns=["Year","Covered positions","Triggered","Unhedged covered P&L","MEDUSDi proxy hedge P&L","Hedged covered P&L","Coverage","Mapped outcomes"]
+            st.dataframe(rr,use_container_width=True,hide_index=True)
+
+            replay_chart=replay.melt(
+                id_vars=["year"],value_vars=["covered_book_pnl","hedged_covered_pnl"],
+                var_name="Structure",value_name="P&L"
+            )
+            replay_chart["Structure"]=replay_chart["Structure"].map({"covered_book_pnl":"Unhedged","hedged_covered_pnl":"MEDUSDi proxy hedged"})
+            fig_replay=px.bar(replay_chart,x="year",y="P&L",color="Structure",barmode="group",labels={"year":"Replay year"})
+            fig_replay.update_layout(height=340,margin=dict(l=0,r=0,t=20,b=0),legend_title_text="")
+            st.plotly_chart(fig_replay,use_container_width=True,config={"displayModeBar":False})
+
+        st.markdown("<div class='dark'><b>Coverage discipline:</b> Medical CPI and Healthcare Services PPI are observed BLS histories. National influenza is verified first-print CDC history for the 2025–26 season. Texas respiratory currently uses national influenza only as an explicit basis proxy. Medicare reimbursement and specialty-drug positions are excluded from replay until their historical settlement series are mapped. MEDUSDi hedge performance uses Medical CPI as a fair-value proxy—not historical token spot returns.</div>",unsafe_allow_html=True)
+    else:
+        st.info("BLS history is unavailable in this session. The deterministic CDC replay above remains available; inflation backtesting will populate automatically when the BLS API is reachable.")
+
+with tabs[14]:
+    st.markdown("<div class='section'>Live data operationalization</div>",unsafe_allow_html=True)
+    st.markdown("<div class='callout'><b>Resilient source layer.</b> Live public data are treated as reference/observation inputs. If an endpoint fails, the app degrades to modeled/cached values rather than crashing. A live public print does not automatically become an Oriel fair-value mark without an approved valuation mapping.</div>",unsafe_allow_html=True)
+
+    refresh_live=st.button("Refresh public sources",key="refresh_public_sources")
+    if refresh_live:
+        load_public_sources.clear()
+    live=load_public_sources(2021,datetime.now().year)
+
+    status_rows=[]
+    for src in LIVE_SOURCE_REGISTRY:
+        status="MODELED / MANUAL"
+        detail=src["mode"]
+        if src["source"]=="BLS Medical CPI":
+            status="LIVE" if "Medical CPI" in live["bls"] else "FALLBACK"
+        elif src["source"]=="BLS Healthcare Services PPI":
+            status="LIVE" if "Healthcare Services PPI" in live["bls"] else "FALLBACK"
+        elif src["source"]=="CDC NSSP / FluView":
+            status="LIVE" if live["cdc"] is not None else "FALLBACK"
+        elif "NOT CONNECTED" in src["mode"]:
+            status="NOT CONNECTED"
+        status_rows.append([src["source"],src["role"],status,detail,src["production_use"]])
+    status_df=pd.DataFrame(status_rows,columns=["Source","Role","Status","Mode","Current use"])
+    st.dataframe(status_df,use_container_width=True,hide_index=True)
+
+    if live["errors"]:
+        st.warning("Source errors: "+" | ".join(live["errors"]))
+    st.caption("Last refresh (UTC): "+str(live["fetched_at"]))
+
+    st.markdown("#### Live public references")
+    ref_cols=st.columns(3)
+    med=live["bls"].get("Medical CPI",{}).get("latest",{})
+    ppi=live["bls"].get("Healthcare Services PPI",{}).get("latest",{})
+    cdc=live.get("cdc")
+    ref_cols[0].metric("Medical CPI",f"{med.get('value'):,.3f}" if med.get("value") is not None else "Unavailable",f"{med.get('yoy_pct'):.2f}% YoY" if med.get("yoy_pct") is not None else None)
+    ref_cols[1].metric("Healthcare Services PPI",f"{ppi.get('value'):,.3f}" if ppi.get("value") is not None else "Unavailable",f"{ppi.get('yoy_pct'):.2f}% YoY" if ppi.get("yoy_pct") is not None else None)
+    ref_cols[2].metric("CDC NSSP rows fetched",str(cdc.get("rows")) if cdc else "Unavailable",str(cdc.get("latest_date").date()) if cdc and cdc.get("latest_date") is not None else None)
+
+    st.markdown("#### Operational position state")
+    ops=[]
+    for _,row in position_marks(SAMPLE_PORTFOLIO).iterrows():
+        name=str(row["position"])
+        source_state="MODELED"
+        ref="Oriel modeled fair value"
+        if name=="Medical CPI acceleration" and "Medical CPI" in live["bls"]:
+            source_state="LIVE REFERENCE / MODELED MARK"
+            ref="BLS CUUR0000SAM → Oriel valuation mapping pending"
+        elif name=="Healthcare services PPI shock" and "Healthcare Services PPI" in live["bls"]:
+            source_state="LIVE REFERENCE / MODELED MARK"
+            ref="BLS SIHCARE3 → Oriel valuation mapping pending"
+        elif "respiratory" in name.lower() or "influenza" in name.lower():
+            source_state="LIVE OBSERVATION / FIRST-PRINT ARCHIVE REQUIRED" if cdc else "MODELED / CACHED"
+            ref="CDC NSSP / FluView"
+        elif "Medicare" in name:
+            ref="CMS feed not connected"
+        elif "Specialty" in name:
+            ref="Public settlement source still TBD"
+        ops.append([
+            name,row["status"],source_state,ref,
+            f"{float(row['oriel_fair_value']):.1%}",row["settlement_date"],
+        ])
+    ops_df=pd.DataFrame(ops,columns=["Position","Lifecycle state","Data state","Reference path","Current Oriel mark","Settlement"])
+    st.dataframe(ops_df,use_container_width=True,hide_index=True)
+
+    st.markdown("#### Productionization controls")
+    pc1,pc2,pc3,pc4=st.columns(4)
+    pc1.metric("Public reference feeds","3 / 4 wired" if live["cdc"] and live["bls"] else "Degraded")
+    pc2.metric("Live Oriel marks","0 / 6","valuation mapping pending")
+    pc3.metric("Live MEDUSDi spot","Not connected",f"manual {TREASURY_ASSUMPTIONS['medusdi_current_mark']:.4f}")
+    pc4.metric("Venue collateral","Modeled","account feed pending")
+    st.markdown("<div class='dark'><b>Operational boundary:</b> BLS and CDC now refresh as live public reference sources with graceful fallback. The vault intentionally does not promote those raw prints into executable probabilities, token marks, or venue collateral values. The remaining production work is to approve the Oriel reference→fair-value mapping, connect MEDUSDi spot/liquidity, connect the execution venue/clearer, and persist first-print CDC vintages outside the Streamlit session.</div>",unsafe_allow_html=True)
 
 st.markdown("---")
 st.caption("CARE-HRV-01 is a research prototype for institutional discussion. It is not an offering, investment product, executable quote or legal structure.")
