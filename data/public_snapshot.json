@@ -1,17 +1,35 @@
 {
-  "generated_at": null,
-  "status": "not_yet_ingested",
-  "errors": [],
-  "bls_latest": {},
-  "cdc": {"rows_fetched": 0, "new_first_prints": 0, "latest_period": null, "ledger_records": 0},
-  "medusdi": {
-    "spot_status": "not_connected",
-    "reference_status": "pending",
-    "reference_series": "CUUR0000SAM",
-    "note": "MEDUSDi spot requires an explicit token/pool address."
+  "bls_latest": {
+    "Medical CPI": {
+      "date": "2025-12-01",
+      "series_id": "CUUR0000SAM",
+      "value": 587.144,
+      "yoy_pct": 3.2299353169014777
+    },
+    "Medical Care Services CPI": {
+      "date": "2025-12-01",
+      "series_id": "CUUR0000SAM2",
+      "value": 641.566,
+      "yoy_pct": 3.6258031586870354
+    }
   },
+  "cdc": {
+    "latest_period": null,
+    "ledger_records": 0,
+    "new_first_prints": 0,
+    "rows_fetched": 5000
+  },
+  "errors": [],
+  "generated_at": "2026-09-15T06:44:23.916337+00:00",
+  "medusdi": {
+    "note": "MEDUSDi spot requires an explicit token/pool address; Medical CPI is the live fair-value reference input only.",
+    "reference_series": "CUUR0000SAM",
+    "reference_status": "live_medical_cpi",
+    "spot_status": "not_connected"
+  },
+  "status": "healthy",
   "venue": {
-    "status": "not_connected",
-    "note": "Venue collateral/account feed requires authorized API credentials."
+    "note": "Venue collateral/account feed requires authorized API credentials.",
+    "status": "not_connected"
   }
 }
