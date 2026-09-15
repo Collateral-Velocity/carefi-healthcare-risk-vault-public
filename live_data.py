@@ -180,11 +180,16 @@ def fetch_authenticated_json(url: str | None, token: str | None = None, timeout:
     except Exception as exc:
         return {"status":"error","error":str(exc)}
 
-def fetch_oriel_marks() -> dict:
-    return fetch_authenticated_json(
-        os.getenv("ORIEL_MARKS_URL"),
-        os.getenv("ORIEL_MARKS_TOKEN"),
-    )
+ORIEL_MEDUSDI_ARTIFACT="https://orielmarkets.com/medusd/data/usdi_med_basis_monitor.json"
+ORIEL_MEDUSDI_USDC_ARTIFACT="https://orielmarkets.com/medusd/data/usdi_med_usdc_reference.json"
+
+def fetch_oriel_marks(timeout: int = 10) -> dict:
+    url=os.getenv("ORIEL_MARKS_URL") or ORIEL_MEDUSDI_ARTIFACT
+    result=fetch_authenticated_json(url,os.getenv("ORIEL_MARKS_TOKEN"),timeout=timeout)
+    if result.get("status")=="live":
+        result["source"]="Oriel live artifact"
+        result["url"]=url
+    return result
 
 MEDUSDI_UNISWAP_PAIR=os.getenv("MEDUSDI_UNISWAP_PAIR","0xee1a8ace9099257c794a23d2ee2ff6e382e4d72b")
 DEXSCREENER_PAIR_URL="https://api.dexscreener.com/latest/dex/pairs/ethereum/{pair}"
@@ -193,6 +198,32 @@ def fetch_medusdi_spot(timeout: int = 10) -> dict:
     custom_url=os.getenv("MEDUSDI_SPOT_URL")
     if custom_url:
         return fetch_authenticated_json(custom_url,os.getenv("MEDUSDI_SPOT_TOKEN"),timeout=timeout)
+
+    # Primary source: Oriel's own on-chain/BLS monitor artifact.
+    oriel=fetch_authenticated_json(ORIEL_MEDUSDI_ARTIFACT,timeout=timeout)
+    if oriel.get("status")=="live":
+        payload=oriel.get("payload") or {}
+        spot=payload.get("spot") or {}
+        ref=payload.get("reference") or {}
+        basis=payload.get("basis") or {}
+        quality=payload.get("quality") or {}
+        if spot.get("price") is not None:
+            return {
+                "status":"live",
+                "source":"Oriel live MEDUSDi artifact",
+                "pair_address":spot.get("pool_address") or MEDUSDI_UNISWAP_PAIR,
+                "price_native":spot.get("price"),
+                "quote":spot.get("quote","USDi"),
+                "reference_value":ref.get("value"),
+                "reference_source":ref.get("source"),
+                "basis_pct":basis.get("pct"),
+                "quality_status":quality.get("status"),
+                "quality_flags":quality.get("flags") or [],
+                "as_of":spot.get("as_of") or ref.get("as_of"),
+                "contracts":payload.get("contracts") or {},
+            }
+
+    # Fallback: public market-data API for the known Uniswap v3 pool.
     try:
         resp=requests.get(DEXSCREENER_PAIR_URL.format(pair=MEDUSDI_UNISWAP_PAIR),timeout=timeout)
         resp.raise_for_status()
