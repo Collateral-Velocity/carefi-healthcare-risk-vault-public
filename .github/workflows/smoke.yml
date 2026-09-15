@@ -13,7 +13,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: pip install -r requirements.txt pytest
+      - run: pip install -r requirements.txt pytest playwright
+      - run: playwright install --with-deps chromium
       - name: Compile Python
         run: python -m py_compile app.py vault_engine.py historical_replay.py live_data.py ingest_production.py oriel_event_marks.py risk_graph.py capacity_router_v2.py risk_graph_ui.py pages/1_Risk_Graph.py
       - name: Unit tests
@@ -25,17 +26,38 @@ jobs:
           mkdir -p /tmp/solc-out
           npx --yes --package solc@0.8.24 solcjs contracts/CAREHRV01ShareSuite.sol --bin --base-path . -o /tmp/solc-out
           test -n "$(find /tmp/solc-out -name '*.bin' -type f -size +0c -print -quit)"
-      - name: Launch Streamlit and verify health
+      - name: Launch Streamlit and verify rendered UI
         run: |
           streamlit run app.py --server.headless true --server.port 8501 > /tmp/streamlit.log 2>&1 &
           APP_PID=$!
           trap 'kill $APP_PID || true' EXIT
+          READY=0
           for i in {1..30}; do
             if curl --fail --silent http://127.0.0.1:8501/_stcore/health > /dev/null; then
-              echo "Streamlit health check passed"
-              exit 0
+              READY=1
+              break
             fi
             sleep 2
           done
-          cat /tmp/streamlit.log
-          exit 1
+          if [ "$READY" != "1" ]; then
+            cat /tmp/streamlit.log
+            exit 1
+          fi
+          python - <<'PY'
+          from playwright.sync_api import sync_playwright
+          with sync_playwright() as p:
+              browser=p.chromium.launch()
+              page=browser.new_page(viewport={"width": 1900, "height": 900})
+              page.goto("http://127.0.0.1:8501", wait_until="networkidle")
+              page.wait_for_selector(".brand-logo", timeout=30000)
+              logo=page.locator(".brand-logo")
+              loaded=logo.evaluate("(el) => el.complete && el.naturalWidth > 0 && el.naturalHeight > 0")
+              assert loaded, "CareFi logo did not render"
+              page.screenshot(path="/tmp/carefi-render.png", full_page=False)
+              browser.close()
+          PY
+      - name: Upload rendered smoke screenshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: carefi-render
+          path: /tmp/carefi-render.png
