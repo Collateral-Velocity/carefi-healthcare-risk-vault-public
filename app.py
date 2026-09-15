@@ -13,7 +13,16 @@ from historical_replay import (
     cpi_ppi_correlation,
     covered_portfolio_replay,
 )
-from live_data import LIVE_SOURCE_REGISTRY, fetch_public_sources
+from live_data import (
+    LIVE_SOURCE_REGISTRY,
+    fetch_public_sources,
+    load_production_snapshot,
+    load_cdc_first_print_ledger,
+    load_persisted_bls_history,
+    fetch_oriel_marks,
+    fetch_medusdi_spot,
+    fetch_venue_collateral,
+)
 
 from vault_engine import (
     CARE_HRV_01,
@@ -1104,10 +1113,15 @@ with tabs[13]:
     st.markdown("<div class='callout'><b>Observed-data replay.</b> This view uses verified first-published 2025–26 CDC FluView influenza ED data plus live BLS history for Medical CPI and Healthcare Services PPI. It does not manufacture a full six-position history where public historical settlement data are not yet mapped.</div>",unsafe_allow_html=True)
 
     history=load_public_sources(2021,datetime.now().year)
+    persisted_history=load_persisted_bls_history()
     cpi_entry=history["bls"].get("Medical CPI",{})
     ppi_entry=history["bls"].get("Healthcare Services PPI",{})
-    cpi_df=cpi_entry.get("data",pd.DataFrame(columns=["date","value"]))
-    ppi_df=ppi_entry.get("data",pd.DataFrame(columns=["date","value"]))
+    if not persisted_history.empty and "series" in persisted_history.columns:
+        cpi_df=persisted_history[persisted_history["series"]=="Medical CPI"][["date","value"]].copy()
+        ppi_df=persisted_history[persisted_history["series"]=="Healthcare Services PPI"][["date","value"]].copy()
+    else:
+        cpi_df=cpi_entry.get("data",pd.DataFrame(columns=["date","value"]))
+        ppi_df=ppi_entry.get("data",pd.DataFrame(columns=["date","value"]))
     cdc_df=cdc_flu_replay_frame()
 
     h1,h2,h3,h4=st.columns(4)
@@ -1173,76 +1187,113 @@ with tabs[13]:
         st.info("BLS history is unavailable in this session. The deterministic CDC replay above remains available; inflation backtesting will populate automatically when the BLS API is reachable.")
 
 with tabs[14]:
-    st.markdown("<div class='section'>Live data operationalization</div>",unsafe_allow_html=True)
-    st.markdown("<div class='callout'><b>Resilient source layer.</b> Live public data are treated as reference/observation inputs. If an endpoint fails, the app degrades to modeled/cached values rather than crashing. A live public print does not automatically become an Oriel fair-value mark without an approved valuation mapping.</div>",unsafe_allow_html=True)
+    st.markdown("<div class='section'>Production feeds</div>",unsafe_allow_html=True)
+    st.markdown("<div class='callout'><b>Durable ingestion + authenticated adapters.</b> BLS and CDC are ingested on a schedule into versioned repository snapshots. CDC observations are frozen on first ingestion so later revisions do not overwrite the settlement ledger. Oriel marks, MEDUSDi spot and venue collateral are wired through authenticated endpoint adapters and display as live only when an actual endpoint is configured.</div>",unsafe_allow_html=True)
 
-    refresh_live=st.button("Refresh public sources",key="refresh_public_sources")
-    if refresh_live:
-        load_public_sources.clear()
-    live=load_public_sources(2021,datetime.now().year)
+    snapshot=load_production_snapshot()
+    ledger=load_cdc_first_print_ledger()
+    persisted_bls=load_persisted_bls_history()
+    oriel_feed=fetch_oriel_marks()
+    medusdi_feed=fetch_medusdi_spot()
+    venue_feed=fetch_venue_collateral()
 
-    status_rows=[]
-    for src in LIVE_SOURCE_REGISTRY:
-        status="MODELED / MANUAL"
-        detail=src["mode"]
-        if src["source"]=="BLS Medical CPI":
-            status="LIVE" if "Medical CPI" in live["bls"] else "FALLBACK"
-        elif src["source"]=="BLS Healthcare Services PPI":
-            status="LIVE" if "Healthcare Services PPI" in live["bls"] else "FALLBACK"
-        elif src["source"]=="CDC NSSP / FluView":
-            status="LIVE" if live["cdc"] is not None else "FALLBACK"
-        elif "NOT CONNECTED" in src["mode"]:
-            status="NOT CONNECTED"
-        status_rows.append([src["source"],src["role"],status,detail,src["production_use"]])
-    status_df=pd.DataFrame(status_rows,columns=["Source","Role","Status","Mode","Current use"])
-    st.dataframe(status_df,use_container_width=True,hide_index=True)
+    pf1,pf2,pf3,pf4=st.columns(4)
+    pf1.metric("Persistent snapshot",str(snapshot.get("status","unknown")).upper())
+    pf2.metric("Snapshot timestamp",str(snapshot.get("generated_at") or "Pending first ingest"))
+    pf3.metric("CDC first-print records",f"{int(ledger.get('record_count',0)):,}")
+    pf4.metric("Persisted BLS rows",f"{len(persisted_bls):,}")
 
-    if live["errors"]:
-        st.warning("Source errors: "+" | ".join(live["errors"]))
-    st.caption("Last refresh (UTC): "+str(live["fetched_at"]))
+    if snapshot.get("errors"):
+        st.warning("Ingestion status: "+" | ".join(snapshot.get("errors",[])))
 
-    st.markdown("#### Live public references")
-    ref_cols=st.columns(3)
-    med=live["bls"].get("Medical CPI",{}).get("latest",{})
-    ppi=live["bls"].get("Healthcare Services PPI",{}).get("latest",{})
-    cdc=live.get("cdc")
-    ref_cols[0].metric("Medical CPI",f"{med.get('value'):,.3f}" if med.get("value") is not None else "Unavailable",f"{med.get('yoy_pct'):.2f}% YoY" if med.get("yoy_pct") is not None else None)
-    ref_cols[1].metric("Healthcare Services PPI",f"{ppi.get('value'):,.3f}" if ppi.get("value") is not None else "Unavailable",f"{ppi.get('yoy_pct'):.2f}% YoY" if ppi.get("yoy_pct") is not None else None)
-    ref_cols[2].metric("CDC NSSP rows fetched",str(cdc.get("rows")) if cdc else "Unavailable",str(cdc.get("latest_date").date()) if cdc and cdc.get("latest_date") is not None else None)
+    st.markdown("#### Production source registry")
+    bls_latest=snapshot.get("bls_latest",{})
+    cdc_snapshot=snapshot.get("cdc",{})
+    production_rows=[
+        ["BLS Medical CPI","Public reference","LIVE / PERSISTED" if "Medical CPI" in bls_latest else "PENDING / FALLBACK","CUUR0000SAM","Scheduled ingestion → versioned BLS history"],
+        ["BLS Healthcare Services PPI","Public reference","LIVE / PERSISTED" if "Healthcare Services PPI" in bls_latest else "PENDING / FALLBACK","SIHCARE3","Scheduled ingestion → versioned BLS history"],
+        ["CDC NSSP / FluView","Settlement observation","LIVE / FIRST-PRINT LEDGER" if int(ledger.get("record_count",0))>0 else "PENDING FIRST INGEST","rdmq-nq56","First-seen values frozen; revisions ignored"],
+        ["Oriel fair-value marks","Valuation",str(oriel_feed.get("status","not_connected")).upper(),"ORIEL_MARKS_URL","Authenticated JSON endpoint"],
+        ["MEDUSDi spot","Hedge market",str(medusdi_feed.get("status","not_connected")).upper(),"MEDUSDI_SPOT_URL","Authenticated JSON endpoint"],
+        ["Venue / clearer collateral","Execution / treasury",str(venue_feed.get("status","not_connected")).upper(),"VENUE_COLLATERAL_URL","Authenticated JSON endpoint"],
+    ]
+    st.dataframe(pd.DataFrame(production_rows,columns=["Feed","Role","Status","Source / config","Persistence"]),use_container_width=True,hide_index=True)
 
-    st.markdown("#### Operational position state")
-    ops=[]
+    st.markdown("#### Persistent public references")
+    pr1,pr2,pr3=st.columns(3)
+    med=bls_latest.get("Medical CPI",{})
+    ppi=bls_latest.get("Healthcare Services PPI",{})
+    pr1.metric("Medical CPI",f"{med.get('value'):,.3f}" if med.get("value") is not None else "Pending",f"{med.get('yoy_pct'):.2f}% YoY" if med.get("yoy_pct") is not None else None)
+    pr2.metric("Healthcare Services PPI",f"{ppi.get('value'):,.3f}" if ppi.get("value") is not None else "Pending",f"{ppi.get('yoy_pct'):.2f}% YoY" if ppi.get("yoy_pct") is not None else None)
+    pr3.metric("CDC latest period",str(cdc_snapshot.get("latest_period") or "Pending"),f"{int(cdc_snapshot.get('new_first_prints',0)):,} new first prints" if cdc_snapshot else None)
+
+    st.markdown("#### First-print settlement ledger")
+    if int(ledger.get("record_count",0))>0:
+        records=list(ledger.get("records",{}).values())
+        ledger_df=pd.DataFrame(records)
+        preferred=[c for c in ["period_end","geography","disease","value","first_seen_at","source_dataset"] if c in ledger_df.columns]
+        if preferred:
+            ledger_df=ledger_df[preferred].sort_values("period_end",ascending=False).head(50)
+        st.dataframe(ledger_df,use_container_width=True,hide_index=True)
+        st.caption("Showing the 50 most recent frozen observations. The scheduled ingestion job only inserts unseen period/geography/disease keys; it does not overwrite the stored first value.")
+    else:
+        st.info("The first scheduled ingestion has not yet populated the CDC first-print ledger.")
+
+    st.markdown("#### Authenticated production endpoints")
+    endpoint_rows=[]
+    for label,feed in [
+        ("Oriel marks",oriel_feed),
+        ("MEDUSDi spot",medusdi_feed),
+        ("Venue collateral",venue_feed),
+    ]:
+        endpoint_rows.append([
+            label,
+            str(feed.get("status","not_connected")).upper(),
+            "Configured" if feed.get("status") not in ("not_connected",None) else "Endpoint/credential not configured",
+            str(feed.get("error","")) if feed.get("error") else "",
+        ])
+    st.dataframe(pd.DataFrame(endpoint_rows,columns=["Endpoint","State","Configuration","Detail"]),use_container_width=True,hide_index=True)
+
+    if oriel_feed.get("status")=="live":
+        st.markdown("##### Oriel live payload")
+        st.json(oriel_feed.get("payload",{}),expanded=False)
+    if medusdi_feed.get("status")=="live":
+        st.markdown("##### MEDUSDi live spot payload")
+        st.json(medusdi_feed.get("payload",{}),expanded=False)
+    if venue_feed.get("status")=="live":
+        st.markdown("##### Venue / collateral payload")
+        st.json(venue_feed.get("payload",{}),expanded=False)
+
+    st.markdown("#### Position feed provenance")
+    provenance=[]
     for _,row in position_marks(SAMPLE_PORTFOLIO).iterrows():
         name=str(row["position"])
-        source_state="MODELED"
-        ref="Oriel modeled fair value"
-        if name=="Medical CPI acceleration" and "Medical CPI" in live["bls"]:
-            source_state="LIVE REFERENCE / MODELED MARK"
-            ref="BLS CUUR0000SAM → Oriel valuation mapping pending"
-        elif name=="Healthcare services PPI shock" and "Healthcare Services PPI" in live["bls"]:
-            source_state="LIVE REFERENCE / MODELED MARK"
-            ref="BLS SIHCARE3 → Oriel valuation mapping pending"
+        data_state="MODELED MARK"
+        reference="Oriel modeled fair value"
+        durable="No"
+        if name=="Medical CPI acceleration" and "Medical CPI" in bls_latest:
+            data_state="PERSISTED LIVE REFERENCE"
+            reference="BLS CUUR0000SAM"
+            durable="Yes"
+        elif name=="Healthcare services PPI shock" and "Healthcare Services PPI" in bls_latest:
+            data_state="PERSISTED LIVE REFERENCE"
+            reference="BLS SIHCARE3"
+            durable="Yes"
         elif "respiratory" in name.lower() or "influenza" in name.lower():
-            source_state="LIVE OBSERVATION / FIRST-PRINT ARCHIVE REQUIRED" if cdc else "MODELED / CACHED"
-            ref="CDC NSSP / FluView"
+            data_state="PERSISTED FIRST-PRINT OBSERVATION" if int(ledger.get("record_count",0))>0 else "PENDING FIRST-PRINT INGEST"
+            reference="CDC NSSP / FluView"
+            durable="Yes" if int(ledger.get("record_count",0))>0 else "Pending"
         elif "Medicare" in name:
-            ref="CMS feed not connected"
+            reference="CMS production feed not yet configured"
         elif "Specialty" in name:
-            ref="Public settlement source still TBD"
-        ops.append([
-            name,row["status"],source_state,ref,
-            f"{float(row['oriel_fair_value']):.1%}",row["settlement_date"],
-        ])
-    ops_df=pd.DataFrame(ops,columns=["Position","Lifecycle state","Data state","Reference path","Current Oriel mark","Settlement"])
-    st.dataframe(ops_df,use_container_width=True,hide_index=True)
+            reference="Public settlement source still TBD"
+        if oriel_feed.get("status")=="live":
+            data_state+=" / ORIEL ENDPOINT AVAILABLE"
+        provenance.append([name,row["status"],data_state,reference,durable,row["settlement_date"]])
+    st.dataframe(pd.DataFrame(provenance,columns=["Position","Lifecycle","Feed state","Reference","Durable","Settlement"]),use_container_width=True,hide_index=True)
 
-    st.markdown("#### Productionization controls")
-    pc1,pc2,pc3,pc4=st.columns(4)
-    pc1.metric("Public reference feeds","3 / 4 wired" if live["cdc"] and live["bls"] else "Degraded")
-    pc2.metric("Live Oriel marks","0 / 6","valuation mapping pending")
-    pc3.metric("Live MEDUSDi spot","Not connected",f"manual {TREASURY_ASSUMPTIONS['medusdi_current_mark']:.4f}")
-    pc4.metric("Venue collateral","Modeled","account feed pending")
-    st.markdown("<div class='dark'><b>Operational boundary:</b> BLS and CDC now refresh as live public reference sources with graceful fallback. The vault intentionally does not promote those raw prints into executable probabilities, token marks, or venue collateral values. The remaining production work is to approve the Oriel reference→fair-value mapping, connect MEDUSDi spot/liquidity, connect the execution venue/clearer, and persist first-print CDC vintages outside the Streamlit session.</div>",unsafe_allow_html=True)
+    st.markdown("<div class='dark'><b>What is genuinely productionized now:</b> scheduled BLS ingestion, durable BLS history, scheduled CDC ingestion, and a persistent first-print ledger with revision freezing. <b>What remains credential-dependent:</b> official Oriel fair-value marks, MEDUSDi market spot/liquidity, and venue/clearer collateral. Those adapters are implemented but stay NOT CONNECTED until real endpoints or credentials are supplied. No placeholder feed is promoted to LIVE.</div>",unsafe_allow_html=True)
+
 
 st.markdown("---")
 st.caption("CARE-HRV-01 is a research prototype for institutional discussion. It is not an offering, investment product, executable quote or legal structure.")
