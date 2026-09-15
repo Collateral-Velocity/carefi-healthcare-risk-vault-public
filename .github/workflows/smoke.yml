@@ -18,6 +18,11 @@ jobs:
         run: python -m py_compile app.py vault_engine.py historical_replay.py live_data.py ingest_production.py oriel_event_marks.py
       - name: Unit tests
         run: PYTHONPATH=. python -m pytest -q
+      - name: Compile Solidity contracts
+        run: |
+          mkdir -p /tmp/solc-out
+          npx --yes solc@0.8.24 --bin --base-path . --include-path . contracts/CAREHRV01ShareSuite.sol -o /tmp/solc-out
+          test -n "$(find /tmp/solc-out -name '*.bin' -type f -size +0c -print -quit)"
       - name: Launch Streamlit and verify health
         run: |
           streamlit run app.py --server.headless true --server.port 8501 > /tmp/streamlit.log 2>&1 &
