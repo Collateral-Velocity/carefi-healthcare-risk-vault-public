@@ -94,13 +94,44 @@ def parse_bls_special_index_text(text: str, series_id: str = "SIHCARE3") -> pd.D
         return pd.DataFrame(columns=["date","value","series_id"])
     return pd.DataFrame(rows).sort_values("date").drop_duplicates("date",keep="last").reset_index(drop=True)
 
-def fetch_bls_special_index(series_id: str = "SIHCARE3", timeout: int = 20) -> pd.DataFrame:
-    resp=requests.get(BLS_PPI_SPECIAL_INDEX_URL,timeout=timeout)
+def fetch_bls_special_index(
+    series_id: str = "SIHCARE3",
+    start_year: int | None = None,
+    end_year: int | None = None,
+    timeout: int = 20,
+) -> pd.DataFrame:
+    end_year=int(end_year or datetime.now(timezone.utc).year)
+    start_year=int(start_year or max(end_year-10,2014))
+
+    # First preference: isolated BLS API request. Some special indexes are
+    # omitted when mixed with unrelated survey series in one payload.
+    try:
+        resp=requests.post(
+            BLS_API,
+            json={"seriesid":[series_id],"startyear":str(start_year),"endyear":str(end_year)},
+            headers={"Content-Type":"application/json","User-Agent":"CareFi-Oriel/1.0 data-ingestion"},
+            timeout=timeout,
+        )
+        resp.raise_for_status()
+        parsed=parse_bls_response(resp.json())
+        df=parsed.get(series_id,pd.DataFrame())
+        if df is not None and not df.empty:
+            return df
+    except Exception:
+        pass
+
+    # Official PPI Special Indexes flat file fallback.
+    resp=requests.get(
+        BLS_PPI_SPECIAL_INDEX_URL,
+        headers={"User-Agent":"Mozilla/5.0 CareFi-Oriel/1.0 (+https://orielmarkets.com)","Accept":"text/plain,*/*"},
+        timeout=timeout,
+    )
     resp.raise_for_status()
     df=parse_bls_special_index_text(resp.text,series_id=series_id)
     if df.empty:
-        raise RuntimeError(f"{series_id} not found in BLS PPI Special Indexes flat file")
-    return df
+        raise RuntimeError(f"{series_id} not found via BLS API or PPI Special Indexes flat file")
+    mask=(df["date"].dt.year>=start_year)&(df["date"].dt.year<=end_year)
+    return df.loc[mask].reset_index(drop=True)
 
 def _first_present(row: dict, keys: tuple[str,...]):
     for key in keys:
