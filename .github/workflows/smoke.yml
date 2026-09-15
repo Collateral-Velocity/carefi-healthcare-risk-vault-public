@@ -17,4 +17,4 @@ jobs:
       - name: Compile Python
         run: python -m py_compile app.py vault_engine.py historical_replay.py live_data.py
       - name: Unit tests
-        run: pytest -q
+        run: PYTHONPATH=. python -m pytest -q
