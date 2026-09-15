@@ -4,13 +4,6 @@ on:
   schedule:
     - cron: "17 12 * * *"
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - "ingest_production.py"
-      - "live_data.py"
-      - ".github/workflows/production-data.yml"
-
 permissions:
   contents: write
 
@@ -27,6 +20,8 @@ jobs:
         with:
           python-version: "3.11"
       - run: pip install -r requirements.txt
+      - name: Sync latest main
+        run: git pull --ff-only origin main
       - name: Fetch and persist public production feeds
         run: python ingest_production.py
       - name: Commit changed snapshots
@@ -38,6 +33,5 @@ jobs:
             echo "No feed changes"
           else
             git commit -m "Update production public-data snapshot"
-            git pull --rebase origin main
             git push
           fi
