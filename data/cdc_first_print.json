@@ -1,6 +1,6 @@
 {
   "dataset_id": "rdmq-nq56",
-  "last_ingested_at": "2026-09-15T06:46:07.413127+00:00",
+  "last_ingested_at": "2026-09-15T06:47:12.235016+00:00",
   "methodology": "first seen by scheduled ingestion; revisions ignored",
   "record_count": 0,
   "records": {}

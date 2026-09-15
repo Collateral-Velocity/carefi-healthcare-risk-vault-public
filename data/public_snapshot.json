@@ -14,6 +14,18 @@
     }
   },
   "cdc": {
+    "fallback_sample": {
+      "geography": "Alabama",
+      "pathogen": "COVID-19",
+      "percent_visits": "1.2",
+      "week_end": "2023-10-07T00:00:00.000"
+    },
+    "fallback_schema": [
+      "geography",
+      "pathogen",
+      "percent_visits",
+      "week_end"
+    ],
     "latest_period": null,
     "ledger_records": 0,
     "new_first_prints": 0,
@@ -31,10 +43,24 @@
       "hsa_nci_id",
       "trend_source",
       "week_end"
-    ]
+    ],
+    "sample_row": {
+      "buildnumber": "2026-09-14",
+      "county": "Bibb",
+      "ed_trends_covid": "Data Unavailable",
+      "ed_trends_influenza": "Data Unavailable",
+      "ed_trends_rsv": "Data Unavailable",
+      "fips": "1007",
+      "geography": "Alabama",
+      "hsa": "Jefferson (Birmingham), AL - Shelby, AL",
+      "hsa_counties": "Bibb, Blount, Chilton, Cullman, Jefferson, Shelby, St. Clair, Walker",
+      "hsa_nci_id": "150",
+      "trend_source": "HSA",
+      "week_end": "2022-10-01T00:00:00.000"
+    }
   },
   "errors": [],
-  "generated_at": "2026-09-15T06:46:07.413127+00:00",
+  "generated_at": "2026-09-15T06:47:12.235016+00:00",
   "medusdi": {
     "note": "MEDUSDi spot requires an explicit token/pool address; Medical CPI is the live fair-value reference input only.",
     "reference_series": "CUUR0000SAM",
