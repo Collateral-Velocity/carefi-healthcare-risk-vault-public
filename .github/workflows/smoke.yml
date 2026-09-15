@@ -15,7 +15,7 @@ jobs:
           python-version: "3.11"
       - run: pip install -r requirements.txt pytest
       - name: Compile Python
-        run: python -m py_compile app.py vault_engine.py historical_replay.py live_data.py ingest_production.py
+        run: python -m py_compile app.py vault_engine.py historical_replay.py live_data.py ingest_production.py oriel_event_marks.py
       - name: Unit tests
         run: PYTHONPATH=. python -m pytest -q
       - name: Launch Streamlit and verify health
