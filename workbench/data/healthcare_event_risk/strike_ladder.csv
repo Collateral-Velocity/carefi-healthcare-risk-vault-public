@@ -1,0 +1,22 @@
+geography,strike_pct,historical_touches,raw_hit_rate,interpretation,recommended_for_quote
+Texas,6.0,4,1.00,Routine / too low for tail hedge,NO
+Texas,7.0,3,0.75,Likely too low,NO
+Texas,8.0,3,0.75,Still too likely,NO
+Texas,9.0,2,0.50,Middle of observed range,YES
+Texas,9.5,2,0.50,Separates 2022–23 from 2025–26,YES
+Texas,10.0,1,0.25,First clearly interesting tail strike,YES
+Texas,10.5,1,0.25,Useful interpolation point,YES
+Texas,11.0,1,0.25,Preferred initial quote candidate,YES
+Texas,11.5,1,0.25,Worth quoting,YES
+Texas,12.0,0,0.00,No touches in observed sample,YES
+North Carolina,12.0,3,0.75,Too likely / too close to the money,NO
+North Carolina,13.0,3,0.75,Too likely / too close to the money,NO
+North Carolina,13.5,2,0.50,Moderate event; useful lower bound,NO
+North Carolina,14.0,2,0.50,Moderate event; useful lower bound,YES
+North Carolina,14.5,1,0.25,Tail-style range; strongest demo candidates,YES
+North Carolina,15.0,1,0.25,Tail-style range; strongest demo candidates,YES
+North Carolina,15.5,1,0.25,Tail-style range; strongest demo candidates,YES
+North Carolina,16.0,1,0.25,Tail-style range; strongest demo candidates,YES
+North Carolina,16.5,1,0.25,Severe tail; useful upper quote range,NO
+North Carolina,17.0,1,0.25,Severe tail; useful upper quote range,YES
+North Carolina,17.5,0,0.00,Beyond observed four-season maximum,NO
