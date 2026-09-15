@@ -16,8 +16,16 @@ def test_risk_graph_builds_expected_relationships():
     graph=build_risk_graph(SAMPLE_PORTFOLIO,marks,POOLS,RISK_FAMILY_HEALTHCARE_BETA,correlation_matrix_frame(SAMPLE_PORTFOLIO,1.0))
     assert graph["artifact"]=="carefi.risk_graph.v1"
     assert graph["summary"]["event_count"]==6
-    for relation in ["settles_to","eligible_capacity","hedge_beta","correlated_with"]:
+    assert graph["summary"]["client_exposure_count"]==4
+    for relation in ["proxied_by","basis_evidence","maps_to_contract","settles_to","eligible_capacity","hedge_beta","correlated_with"]:
         assert any(e["relation"]==relation for e in graph["edges"])
     tx=next(n for n in graph["nodes"] if n["id"]=="risk:tx-respiratory")
     assert "CARE-HRV-01" in tx["eligible_pools"]
     assert tx["basis_connectivity_score"]>0
+
+
+def test_client_basis_translation_score():
+    from risk_graph import CLIENT_EXPOSURE_PRESETS,client_basis_score
+    result=client_basis_score(CLIENT_EXPOSURE_PRESETS[0])
+    assert 0 < result["score"] <= 100
+    assert result["grade"] in ["A","A-","B+","B","B-","C+"]
