@@ -53,3 +53,20 @@ Prototype institutional capacity layer for healthcare event markets.
 - GitHub Actions smoke workflow compiles all Python modules and runs deterministic replay/data-adapter tests on every push.
 
 Research prototype only. Not an offering, executable quote or legal structure.
+
+
+## Production feeds
+- Scheduled GitHub Actions ingestion persists public BLS and CDC data outside the Streamlit session.
+- Medical CPI uses BLS series `CUUR0000SAM`.
+- CDC influenza ED-visit percentages use dataset `vutn-jzwm`; first-seen period/geography/disease observations are frozen in `data/cdc_first_print.json` and revisions do not overwrite the ledger.
+- `data/public_snapshot.json` records source health and the latest persisted public references.
+- `data/bls_history.csv` is the durable BLS history used by replay/calibration.
+- Production ingestion runs daily at 12:17 UTC and when feed code changes.
+- Oriel live fair-value marks, MEDUSDi spot, and venue/clearer collateral are implemented as authenticated JSON adapters but remain NOT CONNECTED until real endpoints/credentials are configured.
+
+Optional endpoint configuration:
+- `ORIEL_MARKS_URL` / `ORIEL_MARKS_TOKEN`
+- `MEDUSDI_SPOT_URL` / `MEDUSDI_SPOT_TOKEN`
+- `VENUE_COLLATERAL_URL` / `VENUE_COLLATERAL_TOKEN`
+
+No unconfigured endpoint is presented as live.
