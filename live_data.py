@@ -103,8 +103,25 @@ def fetch_bls_special_index(
     end_year=int(end_year or datetime.now(timezone.utc).year)
     start_year=int(start_year or max(end_year-10,2014))
 
-    # First preference: isolated BLS API request. Some special indexes are
-    # omitted when mixed with unrelated survey series in one payload.
+    # First preference: BLS single-series GET. This is the least ambiguous
+    # API signature for special-index identifiers.
+    try:
+        get_url=BLS_API+series_id
+        resp=requests.get(
+            get_url,
+            headers={"User-Agent":"CareFi-Oriel/1.0 data-ingestion"},
+            timeout=timeout,
+        )
+        resp.raise_for_status()
+        parsed=parse_bls_response(resp.json())
+        df=parsed.get(series_id,pd.DataFrame())
+        if df is not None and not df.empty:
+            mask=(df["date"].dt.year>=start_year)&(df["date"].dt.year<=end_year)
+            return df.loc[mask].reset_index(drop=True)
+    except Exception:
+        pass
+
+    # Second preference: isolated BLS POST with an explicit history window.
     try:
         resp=requests.post(
             BLS_API,
