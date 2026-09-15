@@ -4,8 +4,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 import json
 import os
+import base64
+import time
+from urllib.parse import urlparse
 import pandas as pd
 import requests
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import padding
 
 BLS_API="https://api.bls.gov/publicAPI/v2/timeseries/data/"
 CDC_BASE="https://data.cdc.gov/resource"
@@ -181,14 +186,131 @@ def fetch_oriel_marks() -> dict:
         os.getenv("ORIEL_MARKS_TOKEN"),
     )
 
-def fetch_medusdi_spot() -> dict:
-    return fetch_authenticated_json(
-        os.getenv("MEDUSDI_SPOT_URL"),
-        os.getenv("MEDUSDI_SPOT_TOKEN"),
+MEDUSDI_UNISWAP_PAIR=os.getenv("MEDUSDI_UNISWAP_PAIR","0xee1a8ace9099257c794a23d2ee2ff6e382e4d72b")
+DEXSCREENER_PAIR_URL="https://api.dexscreener.com/latest/dex/pairs/ethereum/{pair}"
+
+def fetch_medusdi_spot(timeout: int = 10) -> dict:
+    custom_url=os.getenv("MEDUSDI_SPOT_URL")
+    if custom_url:
+        return fetch_authenticated_json(custom_url,os.getenv("MEDUSDI_SPOT_TOKEN"),timeout=timeout)
+    try:
+        resp=requests.get(DEXSCREENER_PAIR_URL.format(pair=MEDUSDI_UNISWAP_PAIR),timeout=timeout)
+        resp.raise_for_status()
+        payload=resp.json()
+        pairs=payload.get("pairs") or []
+        if not pairs:
+            return {"status":"error","error":"No MEDUSDi Uniswap pair returned","pair":MEDUSDI_UNISWAP_PAIR}
+        pair=pairs[0]
+        return {
+            "status":"live",
+            "source":"DexScreener / Uniswap v3",
+            "pair_address":pair.get("pairAddress",MEDUSDI_UNISWAP_PAIR),
+            "dex_id":pair.get("dexId"),
+            "base_token":pair.get("baseToken"),
+            "quote_token":pair.get("quoteToken"),
+            "price_native":pair.get("priceNative"),
+            "price_usd":pair.get("priceUsd"),
+            "liquidity_usd":(pair.get("liquidity") or {}).get("usd"),
+            "volume":pair.get("volume") or {},
+            "txns":pair.get("txns") or {},
+            "url":pair.get("url"),
+        }
+    except Exception as exc:
+        return {"status":"error","error":str(exc),"pair":MEDUSDI_UNISWAP_PAIR}
+
+KALSHI_PROD_BASE="https://external-api.kalshi.com/trade-api/v2"
+KALSHI_DEMO_BASE="https://external-api.demo.kalshi.co/trade-api/v2"
+
+def _normalize_pem(value: str | None) -> str | None:
+    if not value:
+        return None
+    return value.replace("\\n","\n").strip()
+
+def kalshi_sign(private_key_pem: str, timestamp: str, method: str, full_path: str) -> str:
+    private_key=serialization.load_pem_private_key(
+        _normalize_pem(private_key_pem).encode("utf-8"),
+        password=None,
     )
+    path_without_query=full_path.split("?")[0]
+    message=f"{timestamp}{method.upper()}{path_without_query}".encode("utf-8")
+    signature=private_key.sign(
+        message,
+        padding.PSS(mgf=padding.MGF1(hashes.SHA256()),salt_length=padding.PSS.DIGEST_LENGTH),
+        hashes.SHA256(),
+    )
+    return base64.b64encode(signature).decode("utf-8")
+
+def _kalshi_get(path: str, api_key_id: str, private_key_pem: str, base_url: str, params: dict | None = None, timeout: int = 10) -> dict:
+    timestamp=str(int(time.time()*1000))
+    sign_path=urlparse(base_url+path).path
+    signature=kalshi_sign(private_key_pem,timestamp,"GET",sign_path)
+    headers={
+        "KALSHI-ACCESS-KEY":api_key_id,
+        "KALSHI-ACCESS-SIGNATURE":signature,
+        "KALSHI-ACCESS-TIMESTAMP":timestamp,
+    }
+    resp=requests.get(base_url+path,headers=headers,params=params or {},timeout=timeout)
+    if resp.status_code>=400:
+        detail=resp.text[:500]
+        raise RuntimeError(f"Kalshi HTTP {resp.status_code}: {detail}")
+    return resp.json()
+
+def fetch_kalshi_clearer_state(
+    api_key_id: str | None = None,
+    private_key_pem: str | None = None,
+    environment: str | None = None,
+    subaccount: int | None = None,
+    timeout: int = 10,
+) -> dict:
+    api_key_id=api_key_id or os.getenv("KALSHI_API_KEY_ID")
+    private_key_pem=private_key_pem or os.getenv("KALSHI_PRIVATE_KEY")
+    environment=(environment or os.getenv("KALSHI_ENV","production")).lower()
+    subaccount=int(subaccount if subaccount is not None else os.getenv("KALSHI_SUBACCOUNT","0"))
+    if not api_key_id or not private_key_pem:
+        return {
+            "status":"not_connected",
+            "provider":"Kalshi",
+            "environment":environment,
+            "subaccount":subaccount,
+            "error":"KALSHI_API_KEY_ID and KALSHI_PRIVATE_KEY are not configured",
+        }
+    base_url=KALSHI_DEMO_BASE if environment=="demo" else KALSHI_PROD_BASE
+    try:
+        balance=_kalshi_get(
+            "/portfolio/balance",api_key_id,private_key_pem,base_url,
+            params={"subaccount":subaccount},timeout=timeout,
+        )
+        positions=_kalshi_get(
+            "/portfolio/positions",api_key_id,private_key_pem,base_url,
+            params={"subaccount":subaccount,"limit":1000,"count_filter":"position"},timeout=timeout,
+        )
+        market_positions=positions.get("market_positions") or []
+        gross_exposure=sum(float(p.get("market_exposure_dollars") or 0) for p in market_positions)
+        realized_pnl=sum(float(p.get("realized_pnl_dollars") or 0) for p in market_positions)
+        fees_paid=sum(float(p.get("fees_paid_dollars") or 0) for p in market_positions)
+        return {
+            "status":"live",
+            "provider":"Kalshi",
+            "environment":environment,
+            "subaccount":subaccount,
+            "available_balance_dollars":float(balance.get("balance_dollars") or (float(balance.get("balance",0))/100.0)),
+            "portfolio_value_dollars":float(balance.get("portfolio_value",0))/100.0,
+            "updated_ts":balance.get("updated_ts"),
+            "balance_breakdown":balance.get("balance_breakdown") or [],
+            "market_positions":market_positions,
+            "event_positions":positions.get("event_positions") or [],
+            "gross_market_exposure_dollars":gross_exposure,
+            "realized_pnl_dollars":realized_pnl,
+            "fees_paid_dollars":fees_paid,
+        }
+    except Exception as exc:
+        return {
+            "status":"error",
+            "provider":"Kalshi",
+            "environment":environment,
+            "subaccount":subaccount,
+            "error":str(exc),
+        }
 
 def fetch_venue_collateral() -> dict:
-    return fetch_authenticated_json(
-        os.getenv("VENUE_COLLATERAL_URL"),
-        os.getenv("VENUE_COLLATERAL_TOKEN"),
-    )
+    return fetch_kalshi_clearer_state()
