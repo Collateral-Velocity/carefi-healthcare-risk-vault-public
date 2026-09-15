@@ -195,6 +195,10 @@ def protocol_transaction_snapshot(payload):
 def load_public_sources(start_year:int,end_year:int):
     return fetch_public_sources(start_year,end_year)
 
+@st.cache_data(ttl=900,show_spinner=False)
+def load_oriel_event_marks_feed():
+    return fetch_oriel_marks()
+
 st.set_page_config(page_title="CareFi · Event Capacity Protocol",page_icon="CF",layout="wide",initial_sidebar_state="collapsed")
 
 st.markdown("""
@@ -237,6 +241,16 @@ st.markdown("<div class='hero'><h1>CareFi Event Capacity Protocol</h1><p>Standar
 
 if "payload" not in st.session_state:
     st.session_state.payload=dict(ORIEL_TEXAS_RESPIRATORY)
+
+# Apply healthy persisted Oriel event marks to the valuation hierarchy before
+# NAV, risk and collateral views are rendered.
+oriel_event_feed=load_oriel_event_marks_feed()
+if oriel_event_feed.get("status")=="live":
+    for mark in (oriel_event_feed.get("payload") or {}).get("marks",[]):
+        position=str(mark.get("position",""))
+        if position in POSITION_MARKS and mark.get("source_health")=="healthy" and mark.get("fair_value") is not None:
+            POSITION_MARKS[position]["current_mark"]=float(mark["fair_value"])
+            POSITION_MARKS[position]["mark_source"]="Oriel "+str(mark.get("methodology_version","live"))+" event-mark artifact"
 
 metrics=portfolio_metrics(SAMPLE_PORTFOLIO,CARE_HRV_01["target_capital"])
 m1,m2,m3,m4,m5=st.columns(5)
@@ -1200,7 +1214,7 @@ with tabs[14]:
     snapshot=load_production_snapshot()
     ledger=load_cdc_first_print_ledger()
     persisted_bls=load_persisted_bls_history()
-    oriel_feed=fetch_oriel_marks()
+    oriel_feed=oriel_event_feed
     medusdi_feed=fetch_medusdi_spot()
     venue_feed=fetch_kalshi_clearer_state(
         api_key_id=app_secret("KALSHI_API_KEY_ID"),
@@ -1223,13 +1237,31 @@ with tabs[14]:
     cdc_snapshot=snapshot.get("cdc",{})
     production_rows=[
         ["BLS Medical CPI","Public reference","LIVE / PERSISTED" if "Medical CPI" in bls_latest else "PENDING / FALLBACK","CUUR0000SAM","Scheduled ingestion → versioned BLS history"],
-        ["BLS Healthcare Services PPI","Public reference","LIVE / PERSISTED" if "Healthcare Services PPI" in bls_latest else "PENDING / FALLBACK","SIHCARE3","Scheduled ingestion → versioned BLS history"],
+        ["BLS Healthcare Services PPI","Public reference","LIVE / PERSISTED" if "Healthcare Services PPI" in bls_latest else "PENDING / FALLBACK","SIHCARE3 · BLS Special Indexes flat file","Scheduled ingestion → versioned BLS history"],
         ["CDC NSSP / FluView","Settlement observation","LIVE / FIRST-PRINT LEDGER" if int(ledger.get("record_count",0))>0 else "PENDING FIRST INGEST","vutn-jzwm","First-seen influenza % values frozen; revisions ignored"],
-        ["Oriel MEDUSDi reference","Valuation / hedge reference",str(oriel_feed.get("status","not_connected")).upper(),"Oriel live artifact","Ethereum + BLS monitor artifact"],
+        ["Oriel healthcare event marks","Valuation",str(oriel_feed.get("status","not_connected")).upper(),str(oriel_feed.get("methodology_version") or "OER-HC"),"Persisted event-mark artifact"],
         ["MEDUSDi spot","Hedge market",str(medusdi_feed.get("status","not_connected")).upper(),"Oriel / Uniswap v3","On-chain pool spot + contract reference"],
         ["Kalshi clearer account","Execution / treasury",str(venue_feed.get("status","not_connected")).upper(),"Kalshi Predictions API","RSA-authenticated balance + positions"],
     ]
     st.dataframe(pd.DataFrame(production_rows,columns=["Feed","Role","Status","Source / config","Persistence"]),use_container_width=True,hide_index=True)
+
+    st.markdown("#### Oriel event-mark book")
+    if oriel_feed.get("status")=="live":
+        event_marks=(oriel_feed.get("payload") or {}).get("marks",[])
+        if event_marks:
+            om=pd.DataFrame(event_marks)
+            show_cols=[x for x in ["contract_id","position","fair_value","prior_probability","reference_value","reference_state","source_dataset","basis_grade","source_health","methodology_version","generated_at"] if x in om.columns]
+            om=om[show_cols].copy()
+            if "fair_value" in om.columns:
+                om["fair_value"]=om["fair_value"].map(lambda x:f"{float(x):.1%}" if pd.notna(x) else "—")
+            if "prior_probability" in om.columns:
+                om["prior_probability"]=om["prior_probability"].map(lambda x:f"{float(x):.1%}" if pd.notna(x) else "—")
+            if "reference_value" in om.columns:
+                om["reference_value"]=om["reference_value"].map(lambda x:"—" if pd.isna(x) else f"{float(x):.3f}")
+            st.dataframe(om,use_container_width=True,hide_index=True)
+            st.caption("Healthy Oriel marks above are applied directly to the vault's NAV hierarchy. Non-live contracts remain on their modeled fallback marks.")
+    else:
+        st.info("Oriel event-mark artifact is not yet available.")
 
     st.markdown("#### Persistent public references")
     pr1,pr2,pr3=st.columns(3)
@@ -1253,7 +1285,7 @@ with tabs[14]:
 
     st.markdown("#### Live market + clearing feeds")
     endpoint_rows=[
-        ["Oriel reference",str(oriel_feed.get("status","not_connected")).upper(),oriel_feed.get("source","Oriel live artifact"),str(oriel_feed.get("error","")) if oriel_feed.get("error") else ""],
+        ["Oriel event marks",str(oriel_feed.get("status","not_connected")).upper(),oriel_feed.get("source","Oriel persisted event marks"),str(oriel_feed.get("error","")) if oriel_feed.get("error") else ""],
         ["MEDUSDi spot",str(medusdi_feed.get("status","not_connected")).upper(),medusdi_feed.get("source","Oriel / Uniswap v3"),str(medusdi_feed.get("error","")) if medusdi_feed.get("error") else ""],
         ["Kalshi clearer",str(venue_feed.get("status","not_connected")).upper(),f"{venue_feed.get('environment','production')} · subaccount {venue_feed.get('subaccount',0)}",str(venue_feed.get("error","")) if venue_feed.get("error") else ""],
     ]
@@ -1312,7 +1344,7 @@ with tabs[14]:
         provenance.append([name,row["status"],data_state,reference,durable,row["settlement_date"]])
     st.dataframe(pd.DataFrame(provenance,columns=["Position","Lifecycle","Feed state","Reference","Durable","Settlement"]),use_container_width=True,hide_index=True)
 
-    st.markdown("<div class='dark'><b>Production state:</b> BLS and CDC are persisted on schedule; CDC settlement observations are frozen on first ingestion; Oriel's MEDUSDi reference is consumed from its live Ethereum/BLS artifact; MEDUSDi spot is read from the live USDiMED/USDi Uniswap v3 market with Oriel as primary source. <b>Kalshi clearing:</b> the signed balance/positions adapter is implemented and becomes LIVE only when the app receives a real API key ID + RSA private key. The adapter is read-only in this prototype—no order placement, transfers, or withdrawals.</div>",unsafe_allow_html=True)
+    st.markdown("<div class='dark'><b>Production state:</b> BLS Medical CPI and SIHCARE3 are persisted on schedule; CDC settlement observations are frozen on first ingestion; Oriel healthcare event marks are generated as a versioned artifact and healthy marks feed the NAV hierarchy; MEDUSDi spot/reference comes from Oriel's live Ethereum/BLS monitor artifact. <b>Kalshi clearing:</b> the signed balance/positions adapter is implemented and becomes LIVE only when the app receives a real API key ID + RSA private key. The adapter is read-only in this prototype—no order placement, transfers, or withdrawals.</div>",unsafe_allow_html=True)
 
 
 st.markdown("---")
