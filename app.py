@@ -226,7 +226,7 @@ html,body,[class*="css"]{font-family:'DM Sans',sans-serif;color:#172033}
 </style>
 """,unsafe_allow_html=True)
 
-st.markdown(f"<div class='topbar'><div class='brand-logo-wrap'><img class='brand-logo' src='{CAREFI_LOGO_DATA_URI}' alt='CareFi logo'></div><div class='tag'>EVENT CAPACITY PROTOCOL · V1.0</div></div>",unsafe_allow_html=True)
+st.markdown(f"<div class='topbar'><div class='brand-logo-wrap'><img class='brand-logo' src='{CAREFI_LOGO_DATA_URI}' alt='CareFi logo'></div><div class='tag'>EVENT CAPACITY PROTOCOL · V1.1</div></div>",unsafe_allow_html=True)
 st.markdown("<div class='hero'><h1>CareFi Event Capacity Protocol</h1><p>Standardize event risk, route it to institutional capital, attach healthcare-inflation hedges, and carry the position through settlement and investor distribution. <b>First modeled vault: CARE-HRV-01.</b></p></div>",unsafe_allow_html=True)
 
 if "payload" not in st.session_state:
