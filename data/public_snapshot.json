@@ -39,7 +39,7 @@
     }
   },
   "errors": [],
-  "generated_at": "2026-09-19T15:51:54.386278+00:00",
+  "generated_at": "2026-09-20T16:02:43.612218+00:00",
   "medusdi": {
     "note": "MEDUSDi spot requires an explicit token/pool address; Medical CPI is the live fair-value reference input only.",
     "reference_series": "CUUR0000SAM",
@@ -47,7 +47,7 @@
     "spot_status": "not_connected"
   },
   "oriel_event_marks": {
-    "generated_at": "2026-09-19T15:52:36.649623+00:00",
+    "generated_at": "2026-09-20T16:02:45.715780+00:00",
     "live_mark_count": 4,
     "mark_count": 6,
     "methodology_version": "OER-HC-1.0.0",
