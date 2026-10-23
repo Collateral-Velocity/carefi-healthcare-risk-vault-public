@@ -1,11 +1,30 @@
 {
-  "bls_latest": {},
+  "bls_latest": {
+    "Healthcare Services PPI": {
+      "date": "2026-09-01",
+      "series_id": "WPUSIHCARE3",
+      "value": 137.944,
+      "yoy_pct": 2.6896248818217616
+    },
+    "Medical CPI": {
+      "date": "2025-12-01",
+      "series_id": "CUUR0000SAM",
+      "value": 587.144,
+      "yoy_pct": 3.2299353169014777
+    },
+    "Medical Care Services CPI": {
+      "date": "2025-12-01",
+      "series_id": "CUUR0000SAM2",
+      "value": 641.566,
+      "yoy_pct": 3.6258031586870354
+    }
+  },
   "cdc": {
     "dataset_id": "vutn-jzwm",
-    "latest_period": "2026-10-10",
-    "ledger_records": 8201,
-    "new_first_prints": 0,
-    "rows_fetched": 8216,
+    "latest_period": "2026-10-17",
+    "ledger_records": 8252,
+    "new_first_prints": 51,
+    "rows_fetched": 8268,
     "sample_keys": [
       "geography",
       "pathogen",
@@ -19,24 +38,22 @@
       "week_end": "2023-10-07T00:00:00.000"
     }
   },
-  "errors": [
-    "BLS: HTTPSConnectionPool(host='api.bls.gov', port=443): Read timed out. (read timeout=10)"
-  ],
-  "generated_at": "2026-10-22T17:07:34.853647+00:00",
+  "errors": [],
+  "generated_at": "2026-10-23T17:03:18.811497+00:00",
   "medusdi": {
     "note": "MEDUSDi spot requires an explicit token/pool address; Medical CPI is the live fair-value reference input only.",
     "reference_series": "CUUR0000SAM",
-    "reference_status": "unavailable",
+    "reference_status": "live_medical_cpi",
     "spot_status": "not_connected"
   },
   "oriel_event_marks": {
-    "generated_at": "2026-10-22T17:07:49.273280+00:00",
+    "generated_at": "2026-10-23T17:03:21.050445+00:00",
     "live_mark_count": 4,
     "mark_count": 6,
     "methodology_version": "OER-HC-1.0.0",
     "status": "live"
   },
-  "status": "degraded",
+  "status": "healthy",
   "venue": {
     "note": "Venue collateral/account feed requires authorized API credentials.",
     "status": "not_connected"
