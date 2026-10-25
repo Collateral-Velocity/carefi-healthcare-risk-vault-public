@@ -1,5 +1,24 @@
 {
-  "bls_latest": {},
+  "bls_latest": {
+    "Healthcare Services PPI": {
+      "date": "2026-09-01",
+      "series_id": "WPUSIHCARE3",
+      "value": 137.944,
+      "yoy_pct": 2.6896248818217616
+    },
+    "Medical CPI": {
+      "date": "2025-12-01",
+      "series_id": "CUUR0000SAM",
+      "value": 587.144,
+      "yoy_pct": 3.2299353169014777
+    },
+    "Medical Care Services CPI": {
+      "date": "2025-12-01",
+      "series_id": "CUUR0000SAM2",
+      "value": 641.566,
+      "yoy_pct": 3.6258031586870354
+    }
+  },
   "cdc": {
     "dataset_id": "vutn-jzwm",
     "latest_period": "2026-10-17",
@@ -19,24 +38,22 @@
       "week_end": "2023-10-07T00:00:00.000"
     }
   },
-  "errors": [
-    "BLS: 503 Server Error: Service Unavailable for url: https://api.bls.gov/publicAPI/v2/timeseries/data/"
-  ],
-  "generated_at": "2026-10-24T15:54:37.646627+00:00",
+  "errors": [],
+  "generated_at": "2026-10-25T16:12:37.483651+00:00",
   "medusdi": {
     "note": "MEDUSDi spot requires an explicit token/pool address; Medical CPI is the live fair-value reference input only.",
     "reference_series": "CUUR0000SAM",
-    "reference_status": "unavailable",
+    "reference_status": "live_medical_cpi",
     "spot_status": "not_connected"
   },
   "oriel_event_marks": {
-    "generated_at": "2026-10-24T15:54:39.272219+00:00",
+    "generated_at": "2026-10-25T16:12:39.244658+00:00",
     "live_mark_count": 4,
     "mark_count": 6,
     "methodology_version": "OER-HC-1.0.0",
     "status": "live"
   },
-  "status": "degraded",
+  "status": "healthy",
   "venue": {
     "note": "Venue collateral/account feed requires authorized API credentials.",
     "status": "not_connected"
