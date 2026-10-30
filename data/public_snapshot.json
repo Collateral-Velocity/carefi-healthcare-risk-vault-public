@@ -21,10 +21,10 @@
   },
   "cdc": {
     "dataset_id": "vutn-jzwm",
-    "latest_period": "2026-10-17",
-    "ledger_records": 8252,
-    "new_first_prints": 0,
-    "rows_fetched": 8268,
+    "latest_period": "2026-10-24",
+    "ledger_records": 8301,
+    "new_first_prints": 49,
+    "rows_fetched": 8320,
     "sample_keys": [
       "geography",
       "pathogen",
@@ -39,7 +39,7 @@
     }
   },
   "errors": [],
-  "generated_at": "2026-10-29T18:26:52.524412+00:00",
+  "generated_at": "2026-10-30T17:59:14.570365+00:00",
   "medusdi": {
     "note": "MEDUSDi spot requires an explicit token/pool address; Medical CPI is the live fair-value reference input only.",
     "reference_series": "CUUR0000SAM",
@@ -47,7 +47,7 @@
     "spot_status": "not_connected"
   },
   "oriel_event_marks": {
-    "generated_at": "2026-10-29T18:26:54.039669+00:00",
+    "generated_at": "2026-10-30T17:59:16.214931+00:00",
     "live_mark_count": 4,
     "mark_count": 6,
     "methodology_version": "OER-HC-1.0.0",
