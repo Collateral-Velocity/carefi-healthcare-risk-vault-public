@@ -1,8 +1,8 @@
 {
   "dataset_id": "vutn-jzwm",
-  "last_ingested_at": "2026-11-12T19:52:14.419576+00:00",
+  "last_ingested_at": "2026-11-13T19:38:04.391369+00:00",
   "methodology": "first seen by scheduled ingestion; revisions ignored",
-  "record_count": 8350,
+  "record_count": 8420,
   "records": {
     "2023-10-07|alabama|influenza": {
       "disease": "Influenza",
@@ -67063,6 +67063,15 @@
       "source_dataset": "vutn-jzwm",
       "value": 0.0
     },
+    "2026-07-04|iowa|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "Iowa",
+      "key": "2026-07-04|iowa|influenza",
+      "period_end": "2026-07-04",
+      "source_dataset": "vutn-jzwm",
+      "value": 0.0
+    },
     "2026-07-04|kansas|influenza": {
       "disease": "Influenza",
       "first_seen_at": "2026-09-15T06:48:20.692678+00:00",
@@ -67518,6 +67527,15 @@
       "first_seen_at": "2026-09-15T06:48:20.692678+00:00",
       "geography": "Indiana",
       "key": "2026-07-11|indiana|influenza",
+      "period_end": "2026-07-11",
+      "source_dataset": "vutn-jzwm",
+      "value": 0.0
+    },
+    "2026-07-11|iowa|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "Iowa",
+      "key": "2026-07-11|iowa|influenza",
       "period_end": "2026-07-11",
       "source_dataset": "vutn-jzwm",
       "value": 0.0
@@ -67981,6 +67999,15 @@
       "source_dataset": "vutn-jzwm",
       "value": 0.0
     },
+    "2026-07-18|iowa|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "Iowa",
+      "key": "2026-07-18|iowa|influenza",
+      "period_end": "2026-07-18",
+      "source_dataset": "vutn-jzwm",
+      "value": 0.0
+    },
     "2026-07-18|kansas|influenza": {
       "disease": "Influenza",
       "first_seen_at": "2026-09-15T06:48:20.692678+00:00",
@@ -68436,6 +68463,15 @@
       "first_seen_at": "2026-09-15T06:48:20.692678+00:00",
       "geography": "Indiana",
       "key": "2026-07-25|indiana|influenza",
+      "period_end": "2026-07-25",
+      "source_dataset": "vutn-jzwm",
+      "value": 0.0
+    },
+    "2026-07-25|iowa|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "Iowa",
+      "key": "2026-07-25|iowa|influenza",
       "period_end": "2026-07-25",
       "source_dataset": "vutn-jzwm",
       "value": 0.0
@@ -68899,6 +68935,15 @@
       "source_dataset": "vutn-jzwm",
       "value": 0.0
     },
+    "2026-08-01|iowa|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "Iowa",
+      "key": "2026-08-01|iowa|influenza",
+      "period_end": "2026-08-01",
+      "source_dataset": "vutn-jzwm",
+      "value": 0.0
+    },
     "2026-08-01|kansas|influenza": {
       "disease": "Influenza",
       "first_seen_at": "2026-09-15T06:48:20.692678+00:00",
@@ -69354,6 +69399,15 @@
       "first_seen_at": "2026-09-15T06:48:20.692678+00:00",
       "geography": "Indiana",
       "key": "2026-08-08|indiana|influenza",
+      "period_end": "2026-08-08",
+      "source_dataset": "vutn-jzwm",
+      "value": 0.0
+    },
+    "2026-08-08|iowa|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "Iowa",
+      "key": "2026-08-08|iowa|influenza",
       "period_end": "2026-08-08",
       "source_dataset": "vutn-jzwm",
       "value": 0.0
@@ -69817,6 +69871,15 @@
       "source_dataset": "vutn-jzwm",
       "value": 0.0
     },
+    "2026-08-15|iowa|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "Iowa",
+      "key": "2026-08-15|iowa|influenza",
+      "period_end": "2026-08-15",
+      "source_dataset": "vutn-jzwm",
+      "value": 0.0
+    },
     "2026-08-15|kansas|influenza": {
       "disease": "Influenza",
       "first_seen_at": "2026-09-15T06:48:20.692678+00:00",
@@ -70272,6 +70335,15 @@
       "first_seen_at": "2026-09-15T06:48:20.692678+00:00",
       "geography": "Indiana",
       "key": "2026-08-22|indiana|influenza",
+      "period_end": "2026-08-22",
+      "source_dataset": "vutn-jzwm",
+      "value": 0.0
+    },
+    "2026-08-22|iowa|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "Iowa",
+      "key": "2026-08-22|iowa|influenza",
       "period_end": "2026-08-22",
       "source_dataset": "vutn-jzwm",
       "value": 0.0
@@ -70735,6 +70807,15 @@
       "source_dataset": "vutn-jzwm",
       "value": 0.0
     },
+    "2026-08-29|iowa|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "Iowa",
+      "key": "2026-08-29|iowa|influenza",
+      "period_end": "2026-08-29",
+      "source_dataset": "vutn-jzwm",
+      "value": 0.1
+    },
     "2026-08-29|kansas|influenza": {
       "disease": "Influenza",
       "first_seen_at": "2026-09-15T06:48:20.692678+00:00",
@@ -71194,6 +71275,15 @@
       "source_dataset": "vutn-jzwm",
       "value": 0.1
     },
+    "2026-09-05|iowa|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "Iowa",
+      "key": "2026-09-05|iowa|influenza",
+      "period_end": "2026-09-05",
+      "source_dataset": "vutn-jzwm",
+      "value": 0.0
+    },
     "2026-09-05|kansas|influenza": {
       "disease": "Influenza",
       "first_seen_at": "2026-09-15T06:48:20.692678+00:00",
@@ -71649,6 +71739,15 @@
       "first_seen_at": "2026-09-18T16:22:17.760368+00:00",
       "geography": "Indiana",
       "key": "2026-09-12|indiana|influenza",
+      "period_end": "2026-09-12",
+      "source_dataset": "vutn-jzwm",
+      "value": 0.1
+    },
+    "2026-09-12|iowa|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "Iowa",
+      "key": "2026-09-12|iowa|influenza",
       "period_end": "2026-09-12",
       "source_dataset": "vutn-jzwm",
       "value": 0.1
@@ -72112,6 +72211,15 @@
       "source_dataset": "vutn-jzwm",
       "value": 0.1
     },
+    "2026-09-19|iowa|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "Iowa",
+      "key": "2026-09-19|iowa|influenza",
+      "period_end": "2026-09-19",
+      "source_dataset": "vutn-jzwm",
+      "value": 0.1
+    },
     "2026-09-19|kansas|influenza": {
       "disease": "Influenza",
       "first_seen_at": "2026-09-25T17:08:19.224488+00:00",
@@ -72567,6 +72675,15 @@
       "first_seen_at": "2026-10-02T17:51:42.947634+00:00",
       "geography": "Indiana",
       "key": "2026-09-26|indiana|influenza",
+      "period_end": "2026-09-26",
+      "source_dataset": "vutn-jzwm",
+      "value": 0.2
+    },
+    "2026-09-26|iowa|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "Iowa",
+      "key": "2026-09-26|iowa|influenza",
       "period_end": "2026-09-26",
       "source_dataset": "vutn-jzwm",
       "value": 0.2
@@ -73030,6 +73147,15 @@
       "source_dataset": "vutn-jzwm",
       "value": 0.3
     },
+    "2026-10-03|iowa|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "Iowa",
+      "key": "2026-10-03|iowa|influenza",
+      "period_end": "2026-10-03",
+      "source_dataset": "vutn-jzwm",
+      "value": 0.3
+    },
     "2026-10-03|kansas|influenza": {
       "disease": "Influenza",
       "first_seen_at": "2026-10-09T18:20:26.737230+00:00",
@@ -73488,6 +73614,15 @@
       "period_end": "2026-10-10",
       "source_dataset": "vutn-jzwm",
       "value": 0.4
+    },
+    "2026-10-10|iowa|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "Iowa",
+      "key": "2026-10-10|iowa|influenza",
+      "period_end": "2026-10-10",
+      "source_dataset": "vutn-jzwm",
+      "value": 0.2
     },
     "2026-10-10|kansas|influenza": {
       "disease": "Influenza",
@@ -73948,6 +74083,15 @@
       "source_dataset": "vutn-jzwm",
       "value": 0.5
     },
+    "2026-10-17|iowa|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "Iowa",
+      "key": "2026-10-17|iowa|influenza",
+      "period_end": "2026-10-17",
+      "source_dataset": "vutn-jzwm",
+      "value": 0.3
+    },
     "2026-10-17|kansas|influenza": {
       "disease": "Influenza",
       "first_seen_at": "2026-10-23T17:03:18.811497+00:00",
@@ -74353,6 +74497,15 @@
       "source_dataset": "vutn-jzwm",
       "value": 2.5
     },
+    "2026-10-24|georgia|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "Georgia",
+      "key": "2026-10-24|georgia|influenza",
+      "period_end": "2026-10-24",
+      "source_dataset": "vutn-jzwm",
+      "value": 1.0
+    },
     "2026-10-24|hawaii|influenza": {
       "disease": "Influenza",
       "first_seen_at": "2026-10-30T17:59:14.570365+00:00",
@@ -74388,6 +74541,15 @@
       "period_end": "2026-10-24",
       "source_dataset": "vutn-jzwm",
       "value": 0.7
+    },
+    "2026-10-24|iowa|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "Iowa",
+      "key": "2026-10-24|iowa|influenza",
+      "period_end": "2026-10-24",
+      "source_dataset": "vutn-jzwm",
+      "value": 0.4
     },
     "2026-10-24|kansas|influenza": {
       "disease": "Influenza",
@@ -74794,6 +74956,15 @@
       "source_dataset": "vutn-jzwm",
       "value": 3.0
     },
+    "2026-10-31|georgia|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "Georgia",
+      "key": "2026-10-31|georgia|influenza",
+      "period_end": "2026-10-31",
+      "source_dataset": "vutn-jzwm",
+      "value": 1.6
+    },
     "2026-10-31|hawaii|influenza": {
       "disease": "Influenza",
       "first_seen_at": "2026-11-06T19:21:08.742457+00:00",
@@ -74829,6 +75000,15 @@
       "period_end": "2026-10-31",
       "source_dataset": "vutn-jzwm",
       "value": 0.9
+    },
+    "2026-10-31|iowa|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "Iowa",
+      "key": "2026-10-31|iowa|influenza",
+      "period_end": "2026-10-31",
+      "source_dataset": "vutn-jzwm",
+      "value": 0.6
     },
     "2026-10-31|kansas|influenza": {
       "disease": "Influenza",
@@ -75153,6 +75333,456 @@
       "period_end": "2026-10-31",
       "source_dataset": "vutn-jzwm",
       "value": 1.6
+    },
+    "2026-11-07|alabama|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "Alabama",
+      "key": "2026-11-07|alabama|influenza",
+      "period_end": "2026-11-07",
+      "source_dataset": "vutn-jzwm",
+      "value": 2.4
+    },
+    "2026-11-07|alaska|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "Alaska",
+      "key": "2026-11-07|alaska|influenza",
+      "period_end": "2026-11-07",
+      "source_dataset": "vutn-jzwm",
+      "value": 2.3
+    },
+    "2026-11-07|arizona|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "Arizona",
+      "key": "2026-11-07|arizona|influenza",
+      "period_end": "2026-11-07",
+      "source_dataset": "vutn-jzwm",
+      "value": 1.5
+    },
+    "2026-11-07|arkansas|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "Arkansas",
+      "key": "2026-11-07|arkansas|influenza",
+      "period_end": "2026-11-07",
+      "source_dataset": "vutn-jzwm",
+      "value": 1.5
+    },
+    "2026-11-07|california|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "California",
+      "key": "2026-11-07|california|influenza",
+      "period_end": "2026-11-07",
+      "source_dataset": "vutn-jzwm",
+      "value": 3.0
+    },
+    "2026-11-07|colorado|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "Colorado",
+      "key": "2026-11-07|colorado|influenza",
+      "period_end": "2026-11-07",
+      "source_dataset": "vutn-jzwm",
+      "value": 1.4
+    },
+    "2026-11-07|connecticut|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "Connecticut",
+      "key": "2026-11-07|connecticut|influenza",
+      "period_end": "2026-11-07",
+      "source_dataset": "vutn-jzwm",
+      "value": 1.5
+    },
+    "2026-11-07|district of columbia|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "District of Columbia",
+      "key": "2026-11-07|district of columbia|influenza",
+      "period_end": "2026-11-07",
+      "source_dataset": "vutn-jzwm",
+      "value": 1.5
+    },
+    "2026-11-07|florida|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "Florida",
+      "key": "2026-11-07|florida|influenza",
+      "period_end": "2026-11-07",
+      "source_dataset": "vutn-jzwm",
+      "value": 3.4
+    },
+    "2026-11-07|georgia|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "Georgia",
+      "key": "2026-11-07|georgia|influenza",
+      "period_end": "2026-11-07",
+      "source_dataset": "vutn-jzwm",
+      "value": 2.0
+    },
+    "2026-11-07|hawaii|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "Hawaii",
+      "key": "2026-11-07|hawaii|influenza",
+      "period_end": "2026-11-07",
+      "source_dataset": "vutn-jzwm",
+      "value": 6.7
+    },
+    "2026-11-07|idaho|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "Idaho",
+      "key": "2026-11-07|idaho|influenza",
+      "period_end": "2026-11-07",
+      "source_dataset": "vutn-jzwm",
+      "value": 1.3
+    },
+    "2026-11-07|illinois|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "Illinois",
+      "key": "2026-11-07|illinois|influenza",
+      "period_end": "2026-11-07",
+      "source_dataset": "vutn-jzwm",
+      "value": 0.6
+    },
+    "2026-11-07|indiana|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "Indiana",
+      "key": "2026-11-07|indiana|influenza",
+      "period_end": "2026-11-07",
+      "source_dataset": "vutn-jzwm",
+      "value": 1.0
+    },
+    "2026-11-07|iowa|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "Iowa",
+      "key": "2026-11-07|iowa|influenza",
+      "period_end": "2026-11-07",
+      "source_dataset": "vutn-jzwm",
+      "value": 0.5
+    },
+    "2026-11-07|kansas|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "Kansas",
+      "key": "2026-11-07|kansas|influenza",
+      "period_end": "2026-11-07",
+      "source_dataset": "vutn-jzwm",
+      "value": 0.3
+    },
+    "2026-11-07|kentucky|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "Kentucky",
+      "key": "2026-11-07|kentucky|influenza",
+      "period_end": "2026-11-07",
+      "source_dataset": "vutn-jzwm",
+      "value": 2.2
+    },
+    "2026-11-07|maine|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "Maine",
+      "key": "2026-11-07|maine|influenza",
+      "period_end": "2026-11-07",
+      "source_dataset": "vutn-jzwm",
+      "value": 1.5
+    },
+    "2026-11-07|maryland|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "Maryland",
+      "key": "2026-11-07|maryland|influenza",
+      "period_end": "2026-11-07",
+      "source_dataset": "vutn-jzwm",
+      "value": 1.4
+    },
+    "2026-11-07|massachusetts|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "Massachusetts",
+      "key": "2026-11-07|massachusetts|influenza",
+      "period_end": "2026-11-07",
+      "source_dataset": "vutn-jzwm",
+      "value": 2.0
+    },
+    "2026-11-07|michigan|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "Michigan",
+      "key": "2026-11-07|michigan|influenza",
+      "period_end": "2026-11-07",
+      "source_dataset": "vutn-jzwm",
+      "value": 0.8
+    },
+    "2026-11-07|minnesota|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "Minnesota",
+      "key": "2026-11-07|minnesota|influenza",
+      "period_end": "2026-11-07",
+      "source_dataset": "vutn-jzwm",
+      "value": 0.6
+    },
+    "2026-11-07|mississippi|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "Mississippi",
+      "key": "2026-11-07|mississippi|influenza",
+      "period_end": "2026-11-07",
+      "source_dataset": "vutn-jzwm",
+      "value": 3.2
+    },
+    "2026-11-07|missouri|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "Missouri",
+      "key": "2026-11-07|missouri|influenza",
+      "period_end": "2026-11-07",
+      "source_dataset": "vutn-jzwm",
+      "value": 0.5
+    },
+    "2026-11-07|montana|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "Montana",
+      "key": "2026-11-07|montana|influenza",
+      "period_end": "2026-11-07",
+      "source_dataset": "vutn-jzwm",
+      "value": 1.5
+    },
+    "2026-11-07|nebraska|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "Nebraska",
+      "key": "2026-11-07|nebraska|influenza",
+      "period_end": "2026-11-07",
+      "source_dataset": "vutn-jzwm",
+      "value": 0.5
+    },
+    "2026-11-07|nevada|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "Nevada",
+      "key": "2026-11-07|nevada|influenza",
+      "period_end": "2026-11-07",
+      "source_dataset": "vutn-jzwm",
+      "value": 1.6
+    },
+    "2026-11-07|new hampshire|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "New Hampshire",
+      "key": "2026-11-07|new hampshire|influenza",
+      "period_end": "2026-11-07",
+      "source_dataset": "vutn-jzwm",
+      "value": 1.7
+    },
+    "2026-11-07|new jersey|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "New Jersey",
+      "key": "2026-11-07|new jersey|influenza",
+      "period_end": "2026-11-07",
+      "source_dataset": "vutn-jzwm",
+      "value": 2.3
+    },
+    "2026-11-07|new mexico|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "New Mexico",
+      "key": "2026-11-07|new mexico|influenza",
+      "period_end": "2026-11-07",
+      "source_dataset": "vutn-jzwm",
+      "value": 1.5
+    },
+    "2026-11-07|new york|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "New York",
+      "key": "2026-11-07|new york|influenza",
+      "period_end": "2026-11-07",
+      "source_dataset": "vutn-jzwm",
+      "value": 1.7
+    },
+    "2026-11-07|north carolina|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "North Carolina",
+      "key": "2026-11-07|north carolina|influenza",
+      "period_end": "2026-11-07",
+      "source_dataset": "vutn-jzwm",
+      "value": 2.3
+    },
+    "2026-11-07|north dakota|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "North Dakota",
+      "key": "2026-11-07|north dakota|influenza",
+      "period_end": "2026-11-07",
+      "source_dataset": "vutn-jzwm",
+      "value": 0.4
+    },
+    "2026-11-07|ohio|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "Ohio",
+      "key": "2026-11-07|ohio|influenza",
+      "period_end": "2026-11-07",
+      "source_dataset": "vutn-jzwm",
+      "value": 0.9
+    },
+    "2026-11-07|oklahoma|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "Oklahoma",
+      "key": "2026-11-07|oklahoma|influenza",
+      "period_end": "2026-11-07",
+      "source_dataset": "vutn-jzwm",
+      "value": 1.5
+    },
+    "2026-11-07|oregon|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "Oregon",
+      "key": "2026-11-07|oregon|influenza",
+      "period_end": "2026-11-07",
+      "source_dataset": "vutn-jzwm",
+      "value": 2.4
+    },
+    "2026-11-07|pennsylvania|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "Pennsylvania",
+      "key": "2026-11-07|pennsylvania|influenza",
+      "period_end": "2026-11-07",
+      "source_dataset": "vutn-jzwm",
+      "value": 1.6
+    },
+    "2026-11-07|rhode island|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "Rhode Island",
+      "key": "2026-11-07|rhode island|influenza",
+      "period_end": "2026-11-07",
+      "source_dataset": "vutn-jzwm",
+      "value": 1.9
+    },
+    "2026-11-07|south carolina|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "South Carolina",
+      "key": "2026-11-07|south carolina|influenza",
+      "period_end": "2026-11-07",
+      "source_dataset": "vutn-jzwm",
+      "value": 2.2
+    },
+    "2026-11-07|south dakota|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "South Dakota",
+      "key": "2026-11-07|south dakota|influenza",
+      "period_end": "2026-11-07",
+      "source_dataset": "vutn-jzwm",
+      "value": 0.4
+    },
+    "2026-11-07|tennessee|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "Tennessee",
+      "key": "2026-11-07|tennessee|influenza",
+      "period_end": "2026-11-07",
+      "source_dataset": "vutn-jzwm",
+      "value": 2.2
+    },
+    "2026-11-07|texas|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "Texas",
+      "key": "2026-11-07|texas|influenza",
+      "period_end": "2026-11-07",
+      "source_dataset": "vutn-jzwm",
+      "value": 3.9
+    },
+    "2026-11-07|united states|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "United States",
+      "key": "2026-11-07|united states|influenza",
+      "period_end": "2026-11-07",
+      "source_dataset": "vutn-jzwm",
+      "value": 2.2
+    },
+    "2026-11-07|utah|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "Utah",
+      "key": "2026-11-07|utah|influenza",
+      "period_end": "2026-11-07",
+      "source_dataset": "vutn-jzwm",
+      "value": 1.9
+    },
+    "2026-11-07|vermont|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "Vermont",
+      "key": "2026-11-07|vermont|influenza",
+      "period_end": "2026-11-07",
+      "source_dataset": "vutn-jzwm",
+      "value": 0.7
+    },
+    "2026-11-07|virginia|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "Virginia",
+      "key": "2026-11-07|virginia|influenza",
+      "period_end": "2026-11-07",
+      "source_dataset": "vutn-jzwm",
+      "value": 1.8
+    },
+    "2026-11-07|washington|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "Washington",
+      "key": "2026-11-07|washington|influenza",
+      "period_end": "2026-11-07",
+      "source_dataset": "vutn-jzwm",
+      "value": 3.4
+    },
+    "2026-11-07|west virginia|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "West Virginia",
+      "key": "2026-11-07|west virginia|influenza",
+      "period_end": "2026-11-07",
+      "source_dataset": "vutn-jzwm",
+      "value": 0.8
+    },
+    "2026-11-07|wisconsin|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "Wisconsin",
+      "key": "2026-11-07|wisconsin|influenza",
+      "period_end": "2026-11-07",
+      "source_dataset": "vutn-jzwm",
+      "value": 0.5
+    },
+    "2026-11-07|wyoming|influenza": {
+      "disease": "Influenza",
+      "first_seen_at": "2026-11-13T19:38:04.391369+00:00",
+      "geography": "Wyoming",
+      "key": "2026-11-07|wyoming|influenza",
+      "period_end": "2026-11-07",
+      "source_dataset": "vutn-jzwm",
+      "value": 1.4
     }
   }
 }
